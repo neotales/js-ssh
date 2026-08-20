@@ -1,0 +1,30 @@
+{
+  "name": "@neotales/js-ssh-workspace",
+  "private": true,
+  "workspaces": [
+    "npm/*"
+  ],
+  "scripts": {
+    "build": "deno task build",
+    "test": "deno task test",
+    "lint": "deno task lint",
+    "fmt": "deno task fmt",
+    "fmt:check": "deno task fmt:check",
+    "audit": "deno task audit",
+    "check": "deno task check",
+    "pack": "deno task pack",
+    "clean": "deno task clean"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "oxfmt": "^0.35.0",
+    "oxlint": "^1.46.0",
+    "testcontainers": "^12.1.0",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=11"
+  },
+  "packageManager": "pnpm@11.21.0"
+}
