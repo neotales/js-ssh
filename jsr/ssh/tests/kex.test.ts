@@ -2,6 +2,7 @@ import { deepStrictEqual, notDeepStrictEqual, rejects, strictEqual, throws } fro
 import { test } from "node:test";
 import {
   computeCurve25519Sha256ExchangeHash,
+  deriveKeyMaterial,
   deriveX25519Secret,
   formatKexEcdhInit,
   formatKexEcdhReply,
@@ -125,4 +126,14 @@ test("curve25519-sha256 exchange hashes bind every negotiated transcript field",
     () => computeCurve25519Sha256ExchangeHash({ ...input, sharedSecret: new Uint8Array(32) }),
     SSHKexError,
   );
+});
+
+test("RFC 4253 key material expands deterministically and separates directional labels", async () => {
+  const secret = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
+  const exchangeHash = Uint8Array.from({ length: 32 }, (_, index) => index + 33);
+  const first = await deriveKeyMaterial(secret, exchangeHash, exchangeHash, "A", 64);
+  deepStrictEqual(first, await deriveKeyMaterial(secret, exchangeHash, exchangeHash, "A", 64));
+  strictEqual(first.length, 64);
+  notDeepStrictEqual(first, await deriveKeyMaterial(secret, exchangeHash, exchangeHash, "B", 64));
+  await rejects(() => deriveKeyMaterial(new Uint8Array(32), exchangeHash, exchangeHash, "A", 1), SSHKexError);
 });

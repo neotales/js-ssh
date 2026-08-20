@@ -1,6 +1,6 @@
 import { deepStrictEqual, notDeepStrictEqual, rejects, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { computeCurve25519Sha256ExchangeHash, deriveX25519Secret, formatKexEcdhInit, formatKexEcdhReply, formatKexInit, formatNewKeys, generateX25519KeyPair, isKexGuessCorrect, negotiateKexInit, parseKexEcdhInit, parseKexEcdhReply, parseKexInit, parseNewKeys, SSHKexError, } from "../kex.js";
+import { computeCurve25519Sha256ExchangeHash, deriveKeyMaterial, deriveX25519Secret, formatKexEcdhInit, formatKexEcdhReply, formatKexInit, formatNewKeys, generateX25519KeyPair, isKexGuessCorrect, negotiateKexInit, parseKexEcdhInit, parseKexEcdhReply, parseKexInit, parseNewKeys, SSHKexError, } from "../kex.js";
 function kexInit() {
     return {
         cookie: Uint8Array.from({ length: 16 }, (_, index) => index),
@@ -93,4 +93,13 @@ test("curve25519-sha256 exchange hashes bind every negotiated transcript field",
     strictEqual(hash.length, 32);
     notDeepStrictEqual(hash, await computeCurve25519Sha256ExchangeHash({ ...input, serverKexInit: Uint8Array.of(20, 3) }));
     await rejects(() => computeCurve25519Sha256ExchangeHash({ ...input, sharedSecret: new Uint8Array(32) }), SSHKexError);
+});
+test("RFC 4253 key material expands deterministically and separates directional labels", async () => {
+    const secret = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
+    const exchangeHash = Uint8Array.from({ length: 32 }, (_, index) => index + 33);
+    const first = await deriveKeyMaterial(secret, exchangeHash, exchangeHash, "A", 64);
+    deepStrictEqual(first, await deriveKeyMaterial(secret, exchangeHash, exchangeHash, "A", 64));
+    strictEqual(first.length, 64);
+    notDeepStrictEqual(first, await deriveKeyMaterial(secret, exchangeHash, exchangeHash, "B", 64));
+    await rejects(() => deriveKeyMaterial(new Uint8Array(32), exchangeHash, exchangeHash, "A", 1), SSHKexError);
 });

@@ -61,6 +61,9 @@ export type SSHCurve25519ExchangeHashInput = {
   sharedSecret: Uint8Array;
 };
 
+/** RFC 4253 key-material discriminator for directional IVs, ciphers, and MACs. */
+export type SSHKeyMaterialLabel = "A" | "B" | "C" | "D" | "E" | "F";
+
 /** Error raised when an SSH key-exchange message is malformed. */
 export class SSHKexError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -198,6 +201,48 @@ export async function computeCurve25519Sha256ExchangeHash(input: SSHCurve25519Ex
     .writeMpint(x25519SecretToMpint(input.sharedSecret))
     .toUint8Array();
   return new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(encoded).buffer));
+}
+
+/** Expands SHA-256 SSH key material according to RFC 4253 section 7.2. */
+export async function deriveKeyMaterial(
+  sharedSecret: Uint8Array,
+  exchangeHash: Uint8Array,
+  sessionId: Uint8Array,
+  label: SSHKeyMaterialLabel,
+  length: number,
+): Promise<Uint8Array> {
+  assertX25519PublicKey(sharedSecret);
+  if (sharedSecret.every((byte) => byte === 0))
+    throw new SSHKexError("X25519 shared secret must not be all zeroes");
+  if (exchangeHash.length !== 32 || sessionId.length !== 32)
+    throw new SSHKexError("SSH SHA-256 exchange hashes and session IDs must contain exactly 32 bytes");
+  if (!Number.isSafeInteger(length) || length < 1)
+    throw new SSHKexError("SSH key material length must be a positive safe integer");
+
+  const secret = new SSHWriter().writeMpint(x25519SecretToMpint(sharedSecret)).toUint8Array();
+  let material = new Uint8Array();
+  while (material.length < length) {
+    const seed = new Uint8Array(
+      secret.length + exchangeHash.length + material.length + (material.length === 0 ? 33 : 0),
+    );
+    let offset = 0;
+    seed.set(secret, offset);
+    offset += secret.length;
+    seed.set(exchangeHash, offset);
+    offset += exchangeHash.length;
+    if (material.length === 0) {
+      seed[offset++] = label.charCodeAt(0);
+      seed.set(sessionId, offset);
+    } else {
+      seed.set(material, offset);
+    }
+    const chunk = new Uint8Array(await crypto.subtle.digest("SHA-256", seed.buffer));
+    const expanded = new Uint8Array(material.length + chunk.length);
+    expanded.set(material);
+    expanded.set(chunk, material.length);
+    material = expanded;
+  }
+  return material.slice(0, length);
 }
 
 /** Formats an SSH_MSG_KEXINIT payload. */

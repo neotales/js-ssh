@@ -6,6 +6,7 @@
 
 export {
   computeCurve25519Sha256ExchangeHash,
+  deriveKeyMaterial,
   deriveX25519Secret,
   formatKexEcdhInit,
   formatKexEcdhReply,
@@ -23,5 +24,6 @@ export {
   SSHKexError,
   type SSHKexInit,
   type SSHKexSelection,
+  type SSHKeyMaterialLabel,
   type SSHX25519KeyPair,
 } from "./src/kex.ts";

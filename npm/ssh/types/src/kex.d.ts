@@ -48,6 +48,8 @@ export type SSHCurve25519ExchangeHashInput = {
     serverPublic: Uint8Array;
     sharedSecret: Uint8Array;
 };
+/** RFC 4253 key-material discriminator for directional IVs, ciphers, and MACs. */
+export type SSHKeyMaterialLabel = "A" | "B" | "C" | "D" | "E" | "F";
 /** Error raised when an SSH key-exchange message is malformed. */
 export declare class SSHKexError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -72,6 +74,8 @@ export declare function generateX25519KeyPair(): Promise<SSHX25519KeyPair>;
 export declare function deriveX25519Secret(privateKey: CryptoKey, peerPublicKey: Uint8Array): Promise<Uint8Array>;
 /** Computes the RFC 8731 curve25519-sha256 exchange hash. */
 export declare function computeCurve25519Sha256ExchangeHash(input: SSHCurve25519ExchangeHashInput): Promise<Uint8Array>;
+/** Expands SHA-256 SSH key material according to RFC 4253 section 7.2. */
+export declare function deriveKeyMaterial(sharedSecret: Uint8Array, exchangeHash: Uint8Array, sessionId: Uint8Array, label: SSHKeyMaterialLabel, length: number): Promise<Uint8Array>;
 /** Formats an SSH_MSG_KEXINIT payload. */
 export declare function formatKexInit(init: SSHKexInit): Uint8Array;
 /** Selects algorithms using the client proposal's preference order. */
