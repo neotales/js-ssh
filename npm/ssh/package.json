@@ -1,42 +1,48 @@
 {
   "name": "@neotales/ssh",
   "version": "0.0.0-alpha.0",
-  "description": "Node-first age encryption and SSH2 primitives, clients, and servers",
+  "description": "SSH2 primitives, clients, servers, SFTP, and SCP",
   "keywords": [
-    "age",
-    "encryption",
     "scp",
     "sftp",
     "ssh",
     "ssh2"
   ],
   "homepage": "https://github.com/neotales/js-ssh",
-  "bugs": {
-    "url": "https://github.com/neotales/js-ssh/issues"
-  },
-  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/neotales/js-ssh.git"
   },
-  "files": [
-    "esm",
-    "types",
-    "LICENSE.md",
-    "README.md"
-  ],
-  "type": "module",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/neotales/js-ssh/issues"
+  },
+  "module": "./esm/mod.js",
+  "types": "./types/mod.d.ts",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts",
-      "import": "./esm/index.js"
+      "import": {
+        "types": "./types/mod.d.ts",
+        "default": "./esm/mod.js"
+      }
     },
-    "./package.json": "./package.json"
+    "./primitives": {
+      "import": {
+        "types": "./types/primitives.d.ts",
+        "default": "./esm/primitives.js"
+      }
+    }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "test": "node test_runner.cjs"
   },
+  "type": "module",
   "engines": {
     "node": ">=22"
-  }
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "@deno/shim-deno-test": "~0.5.0"
+  },
+  "_generatedBy": "dnt@0.43.2"
 }

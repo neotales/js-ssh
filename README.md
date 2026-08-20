@@ -1,6 +1,6 @@
 # Neotales JavaScript SSH Libraries
 
-Node-first TypeScript libraries for age encryption and SSH2. This repository is currently a
+Deno-first TypeScript libraries for age encryption and SSH2. This repository is currently a
 scaffold: it deliberately exposes no public API until the protocol and package design are planned.
 
 ## Scope
@@ -26,11 +26,10 @@ rather than silently weakening security.
 
 ## Layout
 
-`npm/ssh/` is the self-contained ESM package. It has no workspace-library dependencies and is the
-future home of the public source, tests, generated JavaScript, and declaration files. `eng/` holds
-repository tasks only. Generated `esm/` JavaScript and `types/` declarations are committed so a
-checkout can be consumed by path without running the build; regenerate them rather than editing
-them directly.
+`jsr/ssh/` contains the canonical Deno package and tests. dnt generates the self-contained ESM npm
+package under `npm/ssh/`. `eng/` holds repository tasks only. Generated `esm/` JavaScript and
+`types/` declarations are committed so a checkout can be consumed by path without running the
+build; regenerate them rather than editing them directly.
 
 ## Development
 
@@ -43,10 +42,9 @@ deno task test
 deno task check
 ```
 
-The `test` task accepts `--node`, `--deno`, or `--bun`; without a runtime flag it runs all selected
-runtimes. There are no tests yet, so it validates that the empty package builds and reports that no
-test files are present. `check` runs linting, formatting validation, the dependency audit, the build,
-and all available test runtimes. `pack` creates a local npm tarball after building.
+The `test` task accepts `--node`, `--deno`, or `--bun`; without a runtime flag it runs Deno source
+tests and dnt's generated Node tests. `check` runs linting, formatting validation, the dependency
+audit, and those default test runtimes. `pack` creates a local npm tarball after building.
 
 ## License
 

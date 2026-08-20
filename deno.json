@@ -1,5 +1,5 @@
 {
-  "workspace": ["./eng"],
+  "workspace": ["./eng", "./jsr/*"],
   "tasks": {
     "build": "deno run -A ./eng/main.ts build",
     "test": "deno run -A ./eng/main.ts test",
