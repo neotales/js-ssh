@@ -8,6 +8,14 @@ function ed25519Wire() {
         .writeString(Uint8Array.from({ length: 32 }, (_, index) => index))
         .toUint8Array();
 }
+function ecdsaWire(curve, pointLength) {
+    const point = Uint8Array.from({ length: pointLength }, (_, index) => (index === 0 ? 4 : index));
+    return new SSHWriter()
+        .writeString(new TextEncoder().encode(`ecdsa-sha2-${curve}`))
+        .writeString(new TextEncoder().encode(curve))
+        .writeString(point)
+        .toUint8Array();
+}
 test("SSH public keys preserve their wire representation", () => {
     const wire = ed25519Wire();
     const key = parsePublicKey(wire);
@@ -35,4 +43,15 @@ test("authorized-key parsing rejects ambiguous and malformed input", () => {
 test("SSH SHA-256 fingerprints use the canonical unpadded OpenSSH form", async () => {
     const fingerprint = await fingerprintSHA256(parsePublicKey(ed25519Wire()));
     strictEqual(fingerprint, "SHA256:ZkAslGjFiUHdGf/WUL8rQvkib4PTvQatUV0OUQSncCA");
+});
+test("supported public-key blobs enforce algorithm-specific structure", () => {
+    deepStrictEqual(parsePublicKey(ecdsaWire("nistp256", 65)).marshal(), ecdsaWire("nistp256", 65));
+    deepStrictEqual(parsePublicKey(new SSHWriter().writeString(new TextEncoder().encode("ssh-rsa")).writeMpint(65537n).writeMpint(3n).toUint8Array()).marshal(), new SSHWriter().writeString(new TextEncoder().encode("ssh-rsa")).writeMpint(65537n).writeMpint(3n).toUint8Array());
+    throws(() => parsePublicKey(new SSHWriter().writeString(new TextEncoder().encode("ssh-ed25519")).toUint8Array()), SSHKeyError);
+    throws(() => parsePublicKey(new SSHWriter()
+        .writeString(new TextEncoder().encode("ssh-ed25519"))
+        .writeString(new Uint8Array(31))
+        .toUint8Array()), SSHKeyError);
+    throws(() => parsePublicKey(new SSHWriter().writeString(new TextEncoder().encode("ssh-rsa")).writeMpint(0n).writeMpint(3n).toUint8Array()), SSHKeyError);
+    throws(() => parsePublicKey(ecdsaWire("nistp384", 65)), SSHKeyError);
 });

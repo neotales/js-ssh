@@ -20,6 +20,7 @@ export class SSHPublicKey {
     const reader = new SSHReader(wire);
     try {
       this.type = decodeKeyType(reader.readString());
+      validatePublicKey(this.type, reader);
     } catch (error) {
       if (error instanceof SSHParseError) {
         throw new SSHKeyError("invalid SSH public-key wire format", { cause: error });
@@ -101,6 +102,56 @@ function decodeKeyType(bytes: Uint8Array): string {
     type += String.fromCharCode(byte);
   }
   return type;
+}
+
+function validatePublicKey(type: string, reader: SSHReader): void {
+  switch (type) {
+    case "ssh-ed25519":
+      readFixedString(reader, 32, "Ed25519 public key");
+      reader.assertDone();
+      return;
+    case "ssh-rsa": {
+      const exponent = reader.readMpint();
+      const modulus = reader.readMpint();
+      if (exponent <= 0n || modulus <= 0n) {
+        throw new SSHKeyError("RSA public-key exponent and modulus must be positive");
+      }
+      reader.assertDone();
+      return;
+    }
+    case "ecdsa-sha2-nistp256":
+      validateEcdsaPublicKey(reader, "nistp256", 65);
+      return;
+    case "ecdsa-sha2-nistp384":
+      validateEcdsaPublicKey(reader, "nistp384", 97);
+      return;
+    case "ecdsa-sha2-nistp521":
+      validateEcdsaPublicKey(reader, "nistp521", 133);
+      return;
+    default:
+      // Unknown public-key formats remain usable for forwarding and fingerprinting.
+      return;
+  }
+}
+
+function validateEcdsaPublicKey(reader: SSHReader, curve: string, pointLength: number): void {
+  const encodedCurve = decodeKeyType(reader.readString());
+  if (encodedCurve !== curve) {
+    throw new SSHKeyError(`ECDSA public-key curve must be ${curve}`);
+  }
+  const point = readFixedString(reader, pointLength, `${curve} public point`);
+  if (point[0] !== 0x04) {
+    throw new SSHKeyError(`${curve} public point must use uncompressed encoding`);
+  }
+  reader.assertDone();
+}
+
+function readFixedString(reader: SSHReader, expectedLength: number, label: string): Uint8Array {
+  const value = reader.readString();
+  if (value.length !== expectedLength) {
+    throw new SSHKeyError(`${label} must be ${expectedLength} bytes`);
+  }
+  return value;
 }
 
 function decodeUtf8(bytes: Uint8Array): string {
