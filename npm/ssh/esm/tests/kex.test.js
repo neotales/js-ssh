@@ -1,6 +1,6 @@
 import { deepStrictEqual, notDeepStrictEqual, rejects, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { computeCurve25519Sha256ExchangeHash, deriveKeyMaterial, deriveX25519Secret, formatKexEcdhInit, formatKexEcdhReply, formatKexInit, formatNewKeys, generateX25519KeyPair, isKexGuessCorrect, negotiateKexInit, parseKexEcdhInit, parseKexEcdhReply, parseKexInit, parseNewKeys, SSHKexError, } from "../kex.js";
+import { computeCurve25519Sha256ExchangeHash, computeCurve25519Sha256ExchangeHashSync, deriveKeyMaterial, deriveKeyMaterialSync, deriveX25519Secret, deriveX25519SecretSync, formatKexEcdhInit, formatKexEcdhReply, formatKexInit, formatNewKeys, generateX25519KeyPair, generateX25519KeyPairSync, isKexGuessCorrect, isSyncKexSupported, negotiateKexInit, parseKexEcdhInit, parseKexEcdhReply, parseKexInit, parseNewKeys, SSHKexError, } from "../kex.js";
 function kexInit() {
     return {
         cookie: Uint8Array.from({ length: 16 }, (_, index) => index),
@@ -102,4 +102,24 @@ test("RFC 4253 key material expands deterministically and separates directional 
     strictEqual(first.length, 64);
     notDeepStrictEqual(first, await deriveKeyMaterial(secret, exchangeHash, exchangeHash, "B", 64));
     await rejects(() => deriveKeyMaterial(new Uint8Array(32), exchangeHash, exchangeHash, "A", 1), SSHKexError);
+});
+test("synchronous KEX APIs use Node-compatible crypto without static imports", async () => {
+    strictEqual(isSyncKexSupported(), true);
+    const client = generateX25519KeyPairSync();
+    const server = generateX25519KeyPairSync();
+    const secret = deriveX25519SecretSync(client.privateKey, server.publicKey);
+    deepStrictEqual(secret, deriveX25519SecretSync(server.privateKey, client.publicKey));
+    const input = {
+        clientIdentification: "SSH-2.0-client",
+        serverIdentification: "SSH-2.0-server",
+        clientKexInit: Uint8Array.of(20, 1),
+        serverKexInit: Uint8Array.of(20, 2),
+        hostKey: Uint8Array.of(3),
+        clientPublic: client.publicKey,
+        serverPublic: server.publicKey,
+        sharedSecret: secret,
+    };
+    deepStrictEqual(computeCurve25519Sha256ExchangeHashSync(input), await computeCurve25519Sha256ExchangeHash(input));
+    const hash = computeCurve25519Sha256ExchangeHashSync(input);
+    deepStrictEqual(deriveKeyMaterialSync(secret, hash, hash, "C", 64), await deriveKeyMaterial(secret, hash, hash, "C", 64));
 });

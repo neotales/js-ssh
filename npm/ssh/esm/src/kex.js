@@ -106,57 +106,59 @@ export async function deriveX25519Secret(privateKey, peerPublicKey) {
     const peerKey = await crypto.subtle.importKey("raw", peerBytes.buffer, { name: "X25519" }, false, []);
     return new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: peerKey }, privateKey, 256));
 }
+/** Reports whether native synchronous Node-compatible crypto is available in this runtime. */
+export function isSyncKexSupported() {
+    return getNodeCrypto() !== undefined;
+}
+/** Generates an ephemeral X25519 key pair using native synchronous Node-compatible crypto. */
+export function generateX25519KeyPairSync() {
+    const crypto = requireNodeCrypto();
+    const pair = crypto.generateKeyPairSync("x25519");
+    const jwk = pair.publicKey.export({ format: "jwk" });
+    if (!isX25519Jwk(jwk))
+        throw new SSHKexError("native crypto returned an invalid X25519 public key");
+    const publicKey = decodeBase64Url(jwk.x);
+    assertX25519PublicKey(publicKey);
+    return { privateKey: pair.privateKey, publicKey };
+}
+/** Derives the 32-byte X25519 shared secret using native synchronous Node-compatible crypto. */
+export function deriveX25519SecretSync(privateKey, peerPublicKey) {
+    assertX25519PublicKey(peerPublicKey);
+    const publicKey = requireNodeCrypto().createPublicKey({
+        key: { kty: "OKP", crv: "X25519", x: encodeBase64Url(peerPublicKey) },
+        format: "jwk",
+    });
+    return Uint8Array.from(requireNodeCrypto().diffieHellman({ privateKey, publicKey }));
+}
 /** Computes the RFC 8731 curve25519-sha256 exchange hash. */
 export async function computeCurve25519Sha256ExchangeHash(input) {
-    assertIdentification(input.clientIdentification, "client");
-    assertIdentification(input.serverIdentification, "server");
-    assertNonEmptyBytes(input.clientKexInit, "client KEXINIT");
-    assertNonEmptyBytes(input.serverKexInit, "server KEXINIT");
-    assertNonEmptyBytes(input.hostKey, "server host key");
-    assertX25519PublicKey(input.clientPublic);
-    assertX25519PublicKey(input.serverPublic);
-    assertX25519PublicKey(input.sharedSecret);
-    if (input.sharedSecret.every((byte) => byte === 0))
-        throw new SSHKexError("X25519 shared secret must not be all zeroes");
-    const encoder = new TextEncoder();
-    const encoded = new SSHWriter()
-        .writeString(encoder.encode(input.clientIdentification))
-        .writeString(encoder.encode(input.serverIdentification))
-        .writeString(input.clientKexInit)
-        .writeString(input.serverKexInit)
-        .writeString(input.hostKey)
-        .writeString(input.clientPublic)
-        .writeString(input.serverPublic)
-        .writeMpint(x25519SecretToMpint(input.sharedSecret))
-        .toUint8Array();
+    const encoded = encodeExchangeHashInput(input);
     return new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(encoded).buffer));
+}
+/** Computes the RFC 8731 curve25519-sha256 exchange hash using synchronous Node-compatible crypto. */
+export function computeCurve25519Sha256ExchangeHashSync(input) {
+    return hashSha256Sync(encodeExchangeHashInput(input));
 }
 /** Expands SHA-256 SSH key material according to RFC 4253 section 7.2. */
 export async function deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, label, length) {
-    assertX25519PublicKey(sharedSecret);
-    if (sharedSecret.every((byte) => byte === 0))
-        throw new SSHKexError("X25519 shared secret must not be all zeroes");
-    if (exchangeHash.length !== 32 || sessionId.length !== 32)
-        throw new SSHKexError("SSH SHA-256 exchange hashes and session IDs must contain exactly 32 bytes");
-    if (!Number.isSafeInteger(length) || length < 1)
-        throw new SSHKexError("SSH key material length must be a positive safe integer");
-    const secret = new SSHWriter().writeMpint(x25519SecretToMpint(sharedSecret)).toUint8Array();
+    const { initialSeed, nextSeed } = keyMaterialSeeds(sharedSecret, exchangeHash, sessionId, label, length);
     let material = new Uint8Array();
     while (material.length < length) {
-        const seed = new Uint8Array(secret.length + exchangeHash.length + material.length + (material.length === 0 ? 33 : 0));
-        let offset = 0;
-        seed.set(secret, offset);
-        offset += secret.length;
-        seed.set(exchangeHash, offset);
-        offset += exchangeHash.length;
-        if (material.length === 0) {
-            seed[offset++] = label.charCodeAt(0);
-            seed.set(sessionId, offset);
-        }
-        else {
-            seed.set(material, offset);
-        }
-        const chunk = new Uint8Array(await crypto.subtle.digest("SHA-256", seed.buffer));
+        const seed = material.length === 0 ? initialSeed : nextSeed(material);
+        const chunk = new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(seed).buffer));
+        const expanded = new Uint8Array(material.length + chunk.length);
+        expanded.set(material);
+        expanded.set(chunk, material.length);
+        material = expanded;
+    }
+    return material.slice(0, length);
+}
+/** Expands SHA-256 SSH key material using synchronous Node-compatible crypto. */
+export function deriveKeyMaterialSync(sharedSecret, exchangeHash, sessionId, label, length) {
+    const { initialSeed, nextSeed } = keyMaterialSeeds(sharedSecret, exchangeHash, sessionId, label, length);
+    let material = new Uint8Array();
+    while (material.length < length) {
+        const chunk = hashSha256Sync(material.length === 0 ? initialSeed : nextSeed(material));
         const expanded = new Uint8Array(material.length + chunk.length);
         expanded.set(material);
         expanded.set(chunk, material.length);
@@ -258,4 +260,113 @@ function x25519SecretToMpint(secret) {
         value = (value << 8n) | BigInt(secret[index]);
     }
     return value;
+}
+function encodeExchangeHashInput(input) {
+    assertIdentification(input.clientIdentification, "client");
+    assertIdentification(input.serverIdentification, "server");
+    assertNonEmptyBytes(input.clientKexInit, "client KEXINIT");
+    assertNonEmptyBytes(input.serverKexInit, "server KEXINIT");
+    assertNonEmptyBytes(input.hostKey, "server host key");
+    assertX25519PublicKey(input.clientPublic);
+    assertX25519PublicKey(input.serverPublic);
+    assertX25519PublicKey(input.sharedSecret);
+    if (input.sharedSecret.every((byte) => byte === 0))
+        throw new SSHKexError("X25519 shared secret must not be all zeroes");
+    const encoder = new TextEncoder();
+    return new SSHWriter()
+        .writeString(encoder.encode(input.clientIdentification))
+        .writeString(encoder.encode(input.serverIdentification))
+        .writeString(input.clientKexInit)
+        .writeString(input.serverKexInit)
+        .writeString(input.hostKey)
+        .writeString(input.clientPublic)
+        .writeString(input.serverPublic)
+        .writeMpint(x25519SecretToMpint(input.sharedSecret))
+        .toUint8Array();
+}
+function keyMaterialSeeds(sharedSecret, exchangeHash, sessionId, label, length) {
+    assertX25519PublicKey(sharedSecret);
+    if (sharedSecret.every((byte) => byte === 0))
+        throw new SSHKexError("X25519 shared secret must not be all zeroes");
+    if (exchangeHash.length !== 32 || sessionId.length !== 32)
+        throw new SSHKexError("SSH SHA-256 exchange hashes and session IDs must contain exactly 32 bytes");
+    if (!Number.isSafeInteger(length) || length < 1)
+        throw new SSHKexError("SSH key material length must be a positive safe integer");
+    const secret = new SSHWriter().writeMpint(x25519SecretToMpint(sharedSecret)).toUint8Array();
+    const initialSeed = new Uint8Array(secret.length + exchangeHash.length + 33);
+    initialSeed.set(secret);
+    initialSeed.set(exchangeHash, secret.length);
+    initialSeed[secret.length + exchangeHash.length] = label.charCodeAt(0);
+    initialSeed.set(sessionId, secret.length + exchangeHash.length + 1);
+    return {
+        initialSeed,
+        nextSeed(material) {
+            const seed = new Uint8Array(secret.length + exchangeHash.length + material.length);
+            seed.set(secret);
+            seed.set(exchangeHash, secret.length);
+            seed.set(material, secret.length + exchangeHash.length);
+            return seed;
+        },
+    };
+}
+function hashSha256Sync(input) {
+    return Uint8Array.from(requireNodeCrypto().createHash("sha256").update(input).digest());
+}
+function getNodeCrypto() {
+    const process = globalThis.process;
+    const builtin = process?.getBuiltinModule?.("node:crypto");
+    if (!isNodeCrypto(builtin))
+        return undefined;
+    return builtin;
+}
+function requireNodeCrypto() {
+    const crypto = getNodeCrypto();
+    if (!crypto)
+        throw new SSHKexError("synchronous KEX crypto requires a Node-compatible runtime");
+    return crypto;
+}
+function isNodeCrypto(value) {
+    return typeof value === "object" && value !== null &&
+        "createHash" in value && "generateKeyPairSync" in value && "createPublicKey" in value && "diffieHellman" in value;
+}
+function isX25519Jwk(value) {
+    return typeof value === "object" && value !== null &&
+        value.kty === "OKP" && value.crv === "X25519" &&
+        typeof value.x === "string";
+}
+function encodeBase64Url(bytes) {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let value = "";
+    for (let index = 0; index < bytes.length; index += 3) {
+        const first = bytes[index];
+        const second = bytes[index + 1];
+        const third = bytes[index + 2];
+        value += alphabet[first >> 2];
+        value += alphabet[((first & 3) << 4) | ((second ?? 0) >> 4)];
+        if (second !== undefined)
+            value += alphabet[((second & 15) << 2) | ((third ?? 0) >> 6)];
+        if (third !== undefined)
+            value += alphabet[third & 63];
+    }
+    return value;
+}
+function decodeBase64Url(value) {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const bytes = [];
+    let accumulator = 0;
+    let bits = 0;
+    for (const character of value) {
+        const digit = alphabet.indexOf(character);
+        if (digit === -1)
+            throw new SSHKexError("native crypto returned invalid base64url public-key data");
+        accumulator = (accumulator << 6) | digit;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            bytes.push((accumulator >> bits) & 0xff);
+        }
+    }
+    if (bits > 0 && (accumulator & ((1 << bits) - 1)) !== 0)
+        throw new SSHKexError("native crypto returned noncanonical base64url public-key data");
+    return Uint8Array.from(bytes);
 }

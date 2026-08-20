@@ -37,6 +37,11 @@ export type SSHX25519KeyPair = {
     privateKey: CryptoKey;
     publicKey: Uint8Array;
 };
+/** An X25519 Node-compatible private key and its 32-byte SSH wire public key. */
+export type SSHX25519SyncKeyPair = {
+    privateKey: object;
+    publicKey: Uint8Array;
+};
 /** Inputs bound into the curve25519-sha256 exchange hash. */
 export type SSHCurve25519ExchangeHashInput = {
     clientIdentification: string;
@@ -72,10 +77,20 @@ export declare function formatNewKeys(): Uint8Array;
 export declare function generateX25519KeyPair(): Promise<SSHX25519KeyPair>;
 /** Derives the 32-byte X25519 shared secret from an ephemeral private key and peer public key. */
 export declare function deriveX25519Secret(privateKey: CryptoKey, peerPublicKey: Uint8Array): Promise<Uint8Array>;
+/** Reports whether native synchronous Node-compatible crypto is available in this runtime. */
+export declare function isSyncKexSupported(): boolean;
+/** Generates an ephemeral X25519 key pair using native synchronous Node-compatible crypto. */
+export declare function generateX25519KeyPairSync(): SSHX25519SyncKeyPair;
+/** Derives the 32-byte X25519 shared secret using native synchronous Node-compatible crypto. */
+export declare function deriveX25519SecretSync(privateKey: object, peerPublicKey: Uint8Array): Uint8Array;
 /** Computes the RFC 8731 curve25519-sha256 exchange hash. */
 export declare function computeCurve25519Sha256ExchangeHash(input: SSHCurve25519ExchangeHashInput): Promise<Uint8Array>;
+/** Computes the RFC 8731 curve25519-sha256 exchange hash using synchronous Node-compatible crypto. */
+export declare function computeCurve25519Sha256ExchangeHashSync(input: SSHCurve25519ExchangeHashInput): Uint8Array;
 /** Expands SHA-256 SSH key material according to RFC 4253 section 7.2. */
 export declare function deriveKeyMaterial(sharedSecret: Uint8Array, exchangeHash: Uint8Array, sessionId: Uint8Array, label: SSHKeyMaterialLabel, length: number): Promise<Uint8Array>;
+/** Expands SHA-256 SSH key material using synchronous Node-compatible crypto. */
+export declare function deriveKeyMaterialSync(sharedSecret: Uint8Array, exchangeHash: Uint8Array, sessionId: Uint8Array, label: SSHKeyMaterialLabel, length: number): Uint8Array;
 /** Formats an SSH_MSG_KEXINIT payload. */
 export declare function formatKexInit(init: SSHKexInit): Uint8Array;
 /** Selects algorithms using the client proposal's preference order. */

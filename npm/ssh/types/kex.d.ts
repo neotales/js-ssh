@@ -3,4 +3,4 @@
  *
  * @module @neotales/ssh/kex
  */
-export { computeCurve25519Sha256ExchangeHash, deriveKeyMaterial, deriveX25519Secret, formatKexEcdhInit, formatKexEcdhReply, formatKexInit, formatNewKeys, generateX25519KeyPair, isKexGuessCorrect, negotiateKexInit, parseKexEcdhInit, parseKexEcdhReply, parseKexInit, parseNewKeys, type SSHCurve25519ExchangeHashInput, type SSHKexEcdhReply, SSHKexError, type SSHKexInit, type SSHKexSelection, type SSHKeyMaterialLabel, type SSHX25519KeyPair, } from "./src/kex.js";
+export { computeCurve25519Sha256ExchangeHash, computeCurve25519Sha256ExchangeHashSync, deriveKeyMaterial, deriveKeyMaterialSync, deriveX25519Secret, deriveX25519SecretSync, formatKexEcdhInit, formatKexEcdhReply, formatKexInit, formatNewKeys, generateX25519KeyPair, generateX25519KeyPairSync, isKexGuessCorrect, isSyncKexSupported, negotiateKexInit, parseKexEcdhInit, parseKexEcdhReply, parseKexInit, parseNewKeys, type SSHCurve25519ExchangeHashInput, type SSHKexEcdhReply, SSHKexError, type SSHKexInit, type SSHKexSelection, type SSHKeyMaterialLabel, type SSHX25519KeyPair, type SSHX25519SyncKeyPair, } from "./src/kex.js";
