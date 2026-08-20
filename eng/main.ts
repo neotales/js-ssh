@@ -47,7 +47,7 @@ async function packageConfig(): Promise<DenoPackage> {
   return JSON.parse(await Deno.readTextFile(join(sourceDirectory, "deno.json"))) as DenoPackage;
 }
 
-async function build(testBun = false): Promise<void> {
+async function build(): Promise<void> {
   const config = await packageConfig();
   const entryPoints: EntryPoint[] = Object.entries(config.exports).map(([name, path]) => ({
     name,
@@ -74,7 +74,7 @@ async function build(testBun = false): Promise<void> {
       declaration: "separate",
       skipSourceOutput: true,
       polyfills: false,
-      shims: { deno: { test: "dev" } },
+      shims: {},
       test: true,
       testIsolation: "process",
       compilerOptions: {
@@ -95,14 +95,13 @@ async function build(testBun = false): Promise<void> {
         bugs: { url: "https://github.com/neotales/js-ssh/issues" },
         homepage: "https://github.com/neotales/js-ssh",
         engines: { node: ">=22" },
+        devDependencies: { "@types/node": "^22.0.0" },
       },
       postBuild() {
         Deno.copyFileSync(join(sourceDirectory, "README.md"), join(outputDirectory, "README.md"));
         Deno.copyFileSync(join(workspace, "LICENSE.md"), join(outputDirectory, "LICENSE.md"));
       },
     });
-    if (testBun) await run("bun", ["test_runner.cjs"], outputDirectory);
-
     for (const name of ["node_modules", "pnpm-lock.yaml", "pnpm-workspace.yaml"]) {
       await Deno.remove(join(outputDirectory, name), { recursive: true }).catch(
         (error: unknown) => {
@@ -159,7 +158,8 @@ async function lint(): Promise<void> {
 async function test(runtimes: Set<string>): Promise<void> {
   const selected = runtimes.size ? runtimes : new Set(["deno", "node"]);
   if (selected.has("deno")) await run("deno", ["test", "-A"], sourceDirectory);
-  if (selected.has("node") || selected.has("bun")) await build(selected.has("bun"));
+  if (selected.has("node") || selected.has("bun")) await build();
+  if (selected.has("bun")) await run("bun", ["test", "esm/tests"], packageDirectory);
 }
 
 async function clean(): Promise<void> {

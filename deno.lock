@@ -10,8 +10,7 @@
     "jsr:@std/path@^1.1.5": "1.1.6",
     "jsr:@ts-morph/bootstrap@0.29": "0.29.0",
     "jsr:@ts-morph/common@0.29": "0.29.0",
-    "npm:@deno/shim-deno-test@0.5": "0.5.0",
-    "npm:@types/node@^20.9.0": "20.19.43",
+    "npm:@types/node@22": "22.20.1",
     "npm:@types/node@^25.9.3": "25.9.5",
     "npm:oxlint@^1.46.0": "1.78.0",
     "npm:testcontainers@^12.1.0": "12.1.0",
@@ -67,9 +66,6 @@
   "npm": {
     "@balena/dockerignore@1.0.2": {
       "integrity": "sha512-wMue2Sy4GAVTk6Ic4tJVcnfdau+gx2EnG7S+uAEe+TWJFqE4YoWN4/H8MSLj4eYJKxGg26lZwboEniNiNwZQ6Q=="
-    },
-    "@deno/shim-deno-test@0.5.0": {
-      "integrity": "sha512-4nMhecpGlPi0cSzT67L+Tm+GOJqvuk8gqHBziqcUQOarnuIax1z96/gJHCSIz2Z0zhxE6Rzwb3IZXPtFh51j+w=="
     },
     "@grpc/grpc-js@1.14.4": {
       "integrity": "sha512-k9Dj3DV/itK9D06Y8f190Qgop7/Ui+D0njFV3LHMPwPT75DpXLQohE9Wmz0QElrJnzsjB7KPWiKJbOl7IPDArQ==",
@@ -261,8 +257,8 @@
         "@types/ssh2"
       ]
     },
-    "@types/node@20.19.43": {
-      "integrity": "sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==",
+    "@types/node@22.20.1": {
+      "integrity": "sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==",
       "dependencies": [
         "undici-types@6.21.0"
       ]
@@ -1055,8 +1051,7 @@
       "npm/ssh": {
         "packageJson": {
           "dependencies": [
-            "npm:@deno/shim-deno-test@0.5",
-            "npm:@types/node@^20.9.0"
+            "npm:@types/node@22"
           ]
         }
       }

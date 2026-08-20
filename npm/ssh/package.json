@@ -26,6 +26,12 @@
         "default": "./esm/mod.js"
       }
     },
+    "./keys": {
+      "import": {
+        "types": "./types/keys.d.ts",
+        "default": "./esm/keys.js"
+      }
+    },
     "./primitives": {
       "import": {
         "types": "./types/primitives.d.ts",
@@ -41,8 +47,7 @@
     "node": ">=22"
   },
   "devDependencies": {
-    "@types/node": "^20.9.0",
-    "@deno/shim-deno-test": "~0.5.0"
+    "@types/node": "^22.0.0"
   },
   "_generatedBy": "dnt@0.43.2"
 }

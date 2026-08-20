@@ -4,3 +4,4 @@
  * @module @neotales/ssh
  */
 export * from "./primitives.js";
+export * from "./keys.js";
