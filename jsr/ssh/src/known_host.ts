@@ -11,6 +11,9 @@ export type KnownHost = {
   comment: string;
 };
 
+/** Result of comparing a presented host key with known_hosts entries. */
+export type HostKeyStatus = "trusted" | "unknown" | "changed" | "revoked";
+
 /** Parses one non-comment OpenSSH known_hosts line. */
 export function parseKnownHost(line: string): KnownHost {
   if (line.includes("\r") || line.includes("\n")) {
@@ -77,6 +80,41 @@ export async function matchesKnownHost(entry: KnownHost, host: string): Promise<
     matched = true;
   }
   return matched;
+}
+
+/**
+ * Verifies a presented host key against parsed known_hosts entries.
+ *
+ * Certificate-authority entries are intentionally ignored until OpenSSH certificate validation is
+ * implemented. A matching revoked key always takes precedence over a trusted entry.
+ */
+export async function verifyKnownHost(
+  entries: Iterable<KnownHost>,
+  host: string,
+  key: SSHPublicKey,
+): Promise<HostKeyStatus> {
+  let foundHost = false;
+  let trusted = false;
+  const wire = key.marshal();
+  for (const entry of entries) {
+    if (!(await matchesKnownHost(entry, host)))
+      continue;
+    if (entry.marker === "@cert-authority")
+      continue;
+
+    const sameKey = bytesEqual(entry.key.marshal(), wire);
+    if (entry.marker === "@revoked") {
+      if (sameKey)
+        return "revoked";
+      continue;
+    }
+    foundHost = true;
+    if (sameKey)
+      trusted = true;
+  }
+  if (trusted)
+    return "trusted";
+  return foundHost ? "changed" : "unknown";
 }
 
 /** Creates an OpenSSH `|1|` hashed-host pattern using the provided random salt. */
@@ -214,6 +252,16 @@ function timingSafeEqual(left: string, right: string): boolean {
   let different = 0;
   for (let index = 0; index < left.length; index++) {
     different |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return different === 0;
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length)
+    return false;
+  let different = 0;
+  for (let index = 0; index < left.length; index++) {
+    different |= left[index] ^ right[index];
   }
   return different === 0;
 }

@@ -1,7 +1,7 @@
 import { deepStrictEqual, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
 import { formatAuthorizedKey, parsePublicKey } from "../keys.js";
-import { hashKnownHost, matchesKnownHost, parseKnownHost, parseKnownHosts } from "../known_hosts.js";
+import { hashKnownHost, matchesKnownHost, parseKnownHost, parseKnownHosts, verifyKnownHost } from "../known_hosts.js";
 import { SSHWriter } from "../primitives.js";
 function publicKeyLine() {
     const key = parsePublicKey(new SSHWriter()
@@ -36,4 +36,16 @@ test("known_hosts matching supports exact, wildcard, negated, and hashed pattern
 test("known_hosts parsing rejects unsupported markers and empty patterns", () => {
     throws(() => parseKnownHost(`@unknown example.test ${publicKeyLine()}`));
     throws(() => parseKnownHost(`example.test,,other.test ${publicKeyLine()}`));
+});
+test("known_hosts verification distinguishes trusted, changed, revoked, and unknown keys", async () => {
+    const trusted = parseKnownHost(`example.test ${publicKeyLine()}`);
+    const revoked = parseKnownHost(`@revoked example.test ${publicKeyLine()}`);
+    const otherKey = parsePublicKey(new SSHWriter()
+        .writeString(new TextEncoder().encode("ssh-ed25519"))
+        .writeString(Uint8Array.from({ length: 32 }, (_, index) => 255 - index))
+        .toUint8Array());
+    strictEqual(await verifyKnownHost([trusted], "example.test", trusted.key), "trusted");
+    strictEqual(await verifyKnownHost([trusted], "example.test", otherKey), "changed");
+    strictEqual(await verifyKnownHost([trusted], "other.test", trusted.key), "unknown");
+    strictEqual(await verifyKnownHost([trusted, revoked], "example.test", trusted.key), "revoked");
 });

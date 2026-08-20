@@ -61,6 +61,35 @@ export async function matchesKnownHost(entry, host) {
     }
     return matched;
 }
+/**
+ * Verifies a presented host key against parsed known_hosts entries.
+ *
+ * Certificate-authority entries are intentionally ignored until OpenSSH certificate validation is
+ * implemented. A matching revoked key always takes precedence over a trusted entry.
+ */
+export async function verifyKnownHost(entries, host, key) {
+    let foundHost = false;
+    let trusted = false;
+    const wire = key.marshal();
+    for (const entry of entries) {
+        if (!(await matchesKnownHost(entry, host)))
+            continue;
+        if (entry.marker === "@cert-authority")
+            continue;
+        const sameKey = bytesEqual(entry.key.marshal(), wire);
+        if (entry.marker === "@revoked") {
+            if (sameKey)
+                return "revoked";
+            continue;
+        }
+        foundHost = true;
+        if (sameKey)
+            trusted = true;
+    }
+    if (trusted)
+        return "trusted";
+    return foundHost ? "changed" : "unknown";
+}
 /** Creates an OpenSSH `|1|` hashed-host pattern using the provided random salt. */
 export async function hashKnownHost(host, salt) {
     if (salt.length === 0)
@@ -190,6 +219,15 @@ function timingSafeEqual(left, right) {
     let different = 0;
     for (let index = 0; index < left.length; index++) {
         different |= left.charCodeAt(index) ^ right.charCodeAt(index);
+    }
+    return different === 0;
+}
+function bytesEqual(left, right) {
+    if (left.length !== right.length)
+        return false;
+    let different = 0;
+    for (let index = 0; index < left.length; index++) {
+        different |= left[index] ^ right[index];
     }
     return different === 0;
 }

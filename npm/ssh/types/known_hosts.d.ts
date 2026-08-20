@@ -3,4 +3,4 @@
  *
  * @module @neotales/ssh/known_hosts
  */
-export { hashKnownHost, type KnownHost, type KnownHostMarker, matchesKnownHost, parseKnownHost, parseKnownHosts, } from "./src/known_host.js";
+export { hashKnownHost, type HostKeyStatus, type KnownHost, type KnownHostMarker, matchesKnownHost, parseKnownHost, parseKnownHosts, verifyKnownHost, } from "./src/known_host.js";
