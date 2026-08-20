@@ -1,6 +1,14 @@
 import { deepStrictEqual, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { fingerprintSHA256, formatAuthorizedKey, parseAuthorizedKey, parsePublicKey, SSHKeyError } from "../keys.ts";
+import {
+  fingerprintSHA256,
+  formatAuthorizedKey,
+  parseAuthorizedKey,
+  parsePublicKey,
+  parseSignature,
+  SSHKeyError,
+  verifyEd25519Signature,
+} from "../keys.ts";
 import { SSHWriter } from "../primitives.ts";
 
 function ed25519Wire(): Uint8Array {
@@ -85,4 +93,19 @@ test("supported public-key blobs enforce algorithm-specific structure", () => {
     SSHKeyError,
   );
   throws(() => parsePublicKey(ecdsaWire("nistp384", 65)), SSHKeyError);
+});
+
+test("ssh-ed25519 signatures verify through native WebCrypto", async () => {
+  const pair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]) as CryptoKeyPair;
+  const publicKey = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
+  const message = new TextEncoder().encode("exchange hash");
+  const signature = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, pair.privateKey, message));
+  const key = parsePublicKey(
+    new SSHWriter().writeString(new TextEncoder().encode("ssh-ed25519")).writeString(publicKey).toUint8Array(),
+  );
+  const sshSignature = parseSignature(
+    new SSHWriter().writeString(new TextEncoder().encode("ssh-ed25519")).writeString(signature).toUint8Array(),
+  );
+  strictEqual(await verifyEd25519Signature(key, sshSignature, message), true);
+  strictEqual(await verifyEd25519Signature(key, sshSignature, new TextEncoder().encode("different")), false);
 });

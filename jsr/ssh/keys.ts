@@ -14,3 +14,4 @@ export {
 } from "./src/public_key.ts";
 export { SSHKeyError } from "./src/key_error.ts";
 export { parseSignature, SSHSignature } from "./src/signature.ts";
+export { verifyEd25519Signature } from "./src/verify.ts";
