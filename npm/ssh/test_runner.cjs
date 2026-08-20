@@ -3,6 +3,7 @@ const { styleText } = require("util");
 const process = require("process");
 const filePaths = [
     "tests/identification.test.js",
+    "tests/kex.test.js",
     "tests/keys.test.js",
     "tests/known_hosts.test.js",
     "tests/primitives.test.js",

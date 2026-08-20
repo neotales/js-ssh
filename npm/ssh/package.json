@@ -32,6 +32,12 @@
         "default": "./esm/identification.js"
       }
     },
+    "./kex": {
+      "import": {
+        "types": "./types/kex.d.ts",
+        "default": "./esm/kex.js"
+      }
+    },
     "./keys": {
       "import": {
         "types": "./types/keys.d.ts",
