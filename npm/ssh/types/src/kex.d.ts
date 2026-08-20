@@ -32,6 +32,11 @@ export type SSHKexEcdhReply = {
     serverPublic: Uint8Array;
     signature: Uint8Array;
 };
+/** An X25519 private CryptoKey and its 32-byte SSH wire public key. */
+export type SSHX25519KeyPair = {
+    privateKey: CryptoKey;
+    publicKey: Uint8Array;
+};
 /** Error raised when an SSH key-exchange message is malformed. */
 export declare class SSHKexError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -50,6 +55,10 @@ export declare function formatKexEcdhReply(reply: SSHKexEcdhReply): Uint8Array;
 export declare function parseNewKeys(payload: Uint8Array): void;
 /** Formats SSH_MSG_NEWKEYS. */
 export declare function formatNewKeys(): Uint8Array;
+/** Generates an ephemeral X25519 key pair for curve25519-sha256 key exchange. */
+export declare function generateX25519KeyPair(): Promise<SSHX25519KeyPair>;
+/** Derives the 32-byte X25519 shared secret from an ephemeral private key and peer public key. */
+export declare function deriveX25519Secret(privateKey: CryptoKey, peerPublicKey: Uint8Array): Promise<Uint8Array>;
 /** Formats an SSH_MSG_KEXINIT payload. */
 export declare function formatKexInit(init: SSHKexInit): Uint8Array;
 /** Selects algorithms using the client proposal's preference order. */

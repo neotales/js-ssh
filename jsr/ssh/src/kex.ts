@@ -4,6 +4,7 @@ const SSH_MSG_KEXINIT = 20;
 const SSH_MSG_NEWKEYS = 21;
 const SSH_MSG_KEX_ECDH_INIT = 30;
 const SSH_MSG_KEX_ECDH_REPLY = 31;
+const X25519_PUBLIC_KEY_LENGTH = 32;
 
 /** SSH_MSG_KEXINIT algorithm proposal. */
 export type SSHKexInit = {
@@ -40,6 +41,12 @@ export type SSHKexEcdhReply = {
   hostKey: Uint8Array;
   serverPublic: Uint8Array;
   signature: Uint8Array;
+};
+
+/** An X25519 private CryptoKey and its 32-byte SSH wire public key. */
+export type SSHX25519KeyPair = {
+  privateKey: CryptoKey;
+  publicKey: Uint8Array;
 };
 
 /** Error raised when an SSH key-exchange message is malformed. */
@@ -134,6 +141,24 @@ export function parseNewKeys(payload: Uint8Array): void {
 /** Formats SSH_MSG_NEWKEYS. */
 export function formatNewKeys(): Uint8Array {
   return Uint8Array.of(SSH_MSG_NEWKEYS);
+}
+
+/** Generates an ephemeral X25519 key pair for curve25519-sha256 key exchange. */
+export async function generateX25519KeyPair(): Promise<SSHX25519KeyPair> {
+  const pair = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]) as CryptoKeyPair;
+  const publicKey = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
+  assertX25519PublicKey(publicKey);
+  return { privateKey: pair.privateKey, publicKey };
+}
+
+/** Derives the 32-byte X25519 shared secret from an ephemeral private key and peer public key. */
+export async function deriveX25519Secret(privateKey: CryptoKey, peerPublicKey: Uint8Array): Promise<Uint8Array> {
+  if (privateKey.type !== "private" || privateKey.algorithm.name !== "X25519")
+    throw new SSHKexError("expected an X25519 private key");
+  assertX25519PublicKey(peerPublicKey);
+  const peerBytes = Uint8Array.from(peerPublicKey);
+  const peerKey = await crypto.subtle.importKey("raw", peerBytes.buffer, { name: "X25519" }, false, []);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: peerKey }, privateKey, 256));
 }
 
 /** Formats an SSH_MSG_KEXINIT payload. */
@@ -245,4 +270,9 @@ function selectOptional(client: readonly string[], server: readonly string[]): s
 function assertNonEmptyBytes(value: Uint8Array, name: string): void {
   if (value.length === 0)
     throw new SSHKexError(`SSH ${name} must not be empty`);
+}
+
+function assertX25519PublicKey(value: Uint8Array): void {
+  if (value.length !== X25519_PUBLIC_KEY_LENGTH)
+    throw new SSHKexError("X25519 public keys must contain exactly 32 bytes");
 }

@@ -3,6 +3,7 @@ const SSH_MSG_KEXINIT = 20;
 const SSH_MSG_NEWKEYS = 21;
 const SSH_MSG_KEX_ECDH_INIT = 30;
 const SSH_MSG_KEX_ECDH_REPLY = 31;
+const X25519_PUBLIC_KEY_LENGTH = 32;
 /** Error raised when an SSH key-exchange message is malformed. */
 export class SSHKexError extends Error {
     constructor(message, options) {
@@ -89,6 +90,22 @@ export function parseNewKeys(payload) {
 export function formatNewKeys() {
     return Uint8Array.of(SSH_MSG_NEWKEYS);
 }
+/** Generates an ephemeral X25519 key pair for curve25519-sha256 key exchange. */
+export async function generateX25519KeyPair() {
+    const pair = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+    const publicKey = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
+    assertX25519PublicKey(publicKey);
+    return { privateKey: pair.privateKey, publicKey };
+}
+/** Derives the 32-byte X25519 shared secret from an ephemeral private key and peer public key. */
+export async function deriveX25519Secret(privateKey, peerPublicKey) {
+    if (privateKey.type !== "private" || privateKey.algorithm.name !== "X25519")
+        throw new SSHKexError("expected an X25519 private key");
+    assertX25519PublicKey(peerPublicKey);
+    const peerBytes = Uint8Array.from(peerPublicKey);
+    const peerKey = await crypto.subtle.importKey("raw", peerBytes.buffer, { name: "X25519" }, false, []);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: peerKey }, privateKey, 256));
+}
 /** Formats an SSH_MSG_KEXINIT payload. */
 export function formatKexInit(init) {
     validateKexInit(init);
@@ -163,4 +180,8 @@ function selectOptional(client, server) {
 function assertNonEmptyBytes(value, name) {
     if (value.length === 0)
         throw new SSHKexError(`SSH ${name} must not be empty`);
+}
+function assertX25519PublicKey(value) {
+    if (value.length !== X25519_PUBLIC_KEY_LENGTH)
+        throw new SSHKexError("X25519 public keys must contain exactly 32 bytes");
 }

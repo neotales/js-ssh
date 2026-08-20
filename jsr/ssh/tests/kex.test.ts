@@ -1,10 +1,12 @@
-import { deepStrictEqual, throws } from "node:assert/strict";
+import { deepStrictEqual, rejects, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
 import {
+  deriveX25519Secret,
   formatKexEcdhInit,
   formatKexEcdhReply,
   formatKexInit,
   formatNewKeys,
+  generateX25519KeyPair,
   isKexGuessCorrect,
   negotiateKexInit,
   parseKexEcdhInit,
@@ -87,4 +89,16 @@ test("ECDH key-exchange messages preserve public keys, signatures, and NEWKEYS f
   parseNewKeys(formatNewKeys());
   throws(() => formatKexEcdhInit(new Uint8Array()), SSHKexError);
   throws(() => parseNewKeys(Uint8Array.of(21, 0)));
+});
+
+test("X25519 peers derive the same 32-byte shared secret", async () => {
+  const client = await generateX25519KeyPair();
+  const server = await generateX25519KeyPair();
+  strictEqual(client.publicKey.length, 32);
+  strictEqual(server.publicKey.length, 32);
+  deepStrictEqual(
+    await deriveX25519Secret(client.privateKey, server.publicKey),
+    await deriveX25519Secret(server.privateKey, client.publicKey),
+  );
+  await rejects(() => deriveX25519Secret(client.privateKey, new Uint8Array(31)), SSHKexError);
 });
