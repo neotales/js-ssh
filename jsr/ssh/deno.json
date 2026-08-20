@@ -6,6 +6,7 @@
   "exports": {
     ".": "./mod.ts",
     "./keys": "./keys.ts",
+    "./known_hosts": "./known_hosts.ts",
     "./primitives": "./primitives.ts"
   }
 }

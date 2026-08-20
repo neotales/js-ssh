@@ -192,7 +192,8 @@ function readAuthorizedKeyFieldEnd(text: string, start: number): number {
   let index = start;
   while (index < text.length) {
     const code = text.charCodeAt(index);
-    if (code === 0x20 || code === 0x09) break;
+    if (code === 0x20 || code === 0x09)
+      break;
     if (code < 0x21 || code > 0x7e) {
       throw new SSHKeyError("authorized-key fields must be printable US-ASCII");
     }

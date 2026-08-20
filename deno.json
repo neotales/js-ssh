@@ -15,6 +15,7 @@
     "lineWidth": 120,
     "singleQuote": false,
     "proseWrap": "preserve",
+    "useBraces": "maintain",
     "exclude": ["npm", "node_modules", "artifacts", "pnpm-lock.yaml"]
   }
 }

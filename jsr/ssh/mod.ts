@@ -6,3 +6,4 @@
 
 export * from "./primitives.ts";
 export * from "./keys.ts";
+export * from "./known_hosts.ts";
