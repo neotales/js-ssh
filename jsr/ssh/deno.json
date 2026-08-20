@@ -9,6 +9,7 @@
     "./kex": "./kex.ts",
     "./keys": "./keys.ts",
     "./known_hosts": "./known_hosts.ts",
+    "./packet": "./packet.ts",
     "./primitives": "./primitives.ts"
   }
 }

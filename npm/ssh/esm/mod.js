@@ -8,3 +8,4 @@ export * from "./keys.js";
 export * from "./known_hosts.js";
 export * from "./identification.js";
 export * from "./kex.js";
+export * from "./packet.js";

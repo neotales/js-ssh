@@ -7,6 +7,8 @@
 /types/tests/keys.test.d.ts
 /esm/tests/known_hosts.test.js
 /types/tests/known_hosts.test.d.ts
+/esm/tests/packet.test.js
+/types/tests/packet.test.d.ts
 /esm/tests/primitives.test.js
 /types/tests/primitives.test.d.ts
 /esm/tests/signature.test.js

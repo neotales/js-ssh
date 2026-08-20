@@ -6,6 +6,7 @@ const filePaths = [
     "tests/kex.test.js",
     "tests/keys.test.js",
     "tests/known_hosts.test.js",
+    "tests/packet.test.js",
     "tests/primitives.test.js",
     "tests/signature.test.js",
 ];

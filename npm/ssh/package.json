@@ -50,6 +50,12 @@
         "default": "./esm/known_hosts.js"
       }
     },
+    "./packet": {
+      "import": {
+        "types": "./types/packet.d.ts",
+        "default": "./esm/packet.js"
+      }
+    },
     "./primitives": {
       "import": {
         "types": "./types/primitives.d.ts",
