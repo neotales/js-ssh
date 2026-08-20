@@ -18,6 +18,20 @@ export type SSHKexInit = {
   firstKexPacketFollows: boolean;
 };
 
+/** Algorithms selected from client and server SSH_MSG_KEXINIT proposals. */
+export type SSHKexSelection = {
+  kexAlgorithm: string;
+  serverHostKeyAlgorithm: string;
+  encryptionAlgorithmClientToServer: string;
+  encryptionAlgorithmServerToClient: string;
+  macAlgorithmClientToServer: string;
+  macAlgorithmServerToClient: string;
+  compressionAlgorithmClientToServer: string;
+  compressionAlgorithmServerToClient: string;
+  languageClientToServer?: string;
+  languageServerToClient?: string;
+};
+
 /** Error raised when an SSH key-exchange message is malformed. */
 export class SSHKexError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -79,6 +93,56 @@ export function formatKexInit(init: SSHKexInit): Uint8Array {
   return writer.toUint8Array();
 }
 
+/** Selects algorithms using the client proposal's preference order. */
+export function negotiateKexInit(client: SSHKexInit, server: SSHKexInit): SSHKexSelection {
+  return {
+    kexAlgorithm: selectRequired(client.kexAlgorithms, server.kexAlgorithms, "key exchange"),
+    serverHostKeyAlgorithm: selectRequired(
+      client.serverHostKeyAlgorithms,
+      server.serverHostKeyAlgorithms,
+      "server host key",
+    ),
+    encryptionAlgorithmClientToServer: selectRequired(
+      client.encryptionAlgorithmsClientToServer,
+      server.encryptionAlgorithmsClientToServer,
+      "client-to-server encryption",
+    ),
+    encryptionAlgorithmServerToClient: selectRequired(
+      client.encryptionAlgorithmsServerToClient,
+      server.encryptionAlgorithmsServerToClient,
+      "server-to-client encryption",
+    ),
+    macAlgorithmClientToServer: selectRequired(
+      client.macAlgorithmsClientToServer,
+      server.macAlgorithmsClientToServer,
+      "client-to-server MAC",
+    ),
+    macAlgorithmServerToClient: selectRequired(
+      client.macAlgorithmsServerToClient,
+      server.macAlgorithmsServerToClient,
+      "server-to-client MAC",
+    ),
+    compressionAlgorithmClientToServer: selectRequired(
+      client.compressionAlgorithmsClientToServer,
+      server.compressionAlgorithmsClientToServer,
+      "client-to-server compression",
+    ),
+    compressionAlgorithmServerToClient: selectRequired(
+      client.compressionAlgorithmsServerToClient,
+      server.compressionAlgorithmsServerToClient,
+      "server-to-client compression",
+    ),
+    languageClientToServer: selectOptional(client.languagesClientToServer, server.languagesClientToServer),
+    languageServerToClient: selectOptional(client.languagesServerToClient, server.languagesServerToClient),
+  };
+}
+
+/** Reports whether a proposal's first key-exchange and host-key choices match the negotiated result. */
+export function isKexGuessCorrect(proposal: SSHKexInit, selection: SSHKexSelection): boolean {
+  return proposal.kexAlgorithms[0] === selection.kexAlgorithm &&
+    proposal.serverHostKeyAlgorithms[0] === selection.serverHostKeyAlgorithm;
+}
+
 function validateKexInit(init: SSHKexInit): void {
   if (init.cookie.length !== 16)
     throw new SSHKexError("SSH_MSG_KEXINIT cookie must contain exactly 16 bytes");
@@ -95,4 +159,19 @@ function validateKexInit(init: SSHKexInit): void {
 function assertNonEmpty(value: readonly string[], name: string): void {
   if (value.length === 0)
     throw new SSHKexError(`SSH_MSG_KEXINIT ${name} algorithms must not be empty`);
+}
+
+function selectRequired(client: readonly string[], server: readonly string[], name: string): string {
+  const selected = selectOptional(client, server);
+  if (selected === undefined)
+    throw new SSHKexError(`SSH_MSG_KEXINIT has no shared ${name} algorithm`);
+  return selected;
+}
+
+function selectOptional(client: readonly string[], server: readonly string[]): string | undefined {
+  for (const algorithm of client) {
+    if (server.includes(algorithm))
+      return algorithm;
+  }
+  return undefined;
 }

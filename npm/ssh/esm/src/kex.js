@@ -58,6 +58,26 @@ export function formatKexInit(init) {
         .writeUint32(0);
     return writer.toUint8Array();
 }
+/** Selects algorithms using the client proposal's preference order. */
+export function negotiateKexInit(client, server) {
+    return {
+        kexAlgorithm: selectRequired(client.kexAlgorithms, server.kexAlgorithms, "key exchange"),
+        serverHostKeyAlgorithm: selectRequired(client.serverHostKeyAlgorithms, server.serverHostKeyAlgorithms, "server host key"),
+        encryptionAlgorithmClientToServer: selectRequired(client.encryptionAlgorithmsClientToServer, server.encryptionAlgorithmsClientToServer, "client-to-server encryption"),
+        encryptionAlgorithmServerToClient: selectRequired(client.encryptionAlgorithmsServerToClient, server.encryptionAlgorithmsServerToClient, "server-to-client encryption"),
+        macAlgorithmClientToServer: selectRequired(client.macAlgorithmsClientToServer, server.macAlgorithmsClientToServer, "client-to-server MAC"),
+        macAlgorithmServerToClient: selectRequired(client.macAlgorithmsServerToClient, server.macAlgorithmsServerToClient, "server-to-client MAC"),
+        compressionAlgorithmClientToServer: selectRequired(client.compressionAlgorithmsClientToServer, server.compressionAlgorithmsClientToServer, "client-to-server compression"),
+        compressionAlgorithmServerToClient: selectRequired(client.compressionAlgorithmsServerToClient, server.compressionAlgorithmsServerToClient, "server-to-client compression"),
+        languageClientToServer: selectOptional(client.languagesClientToServer, server.languagesClientToServer),
+        languageServerToClient: selectOptional(client.languagesServerToClient, server.languagesServerToClient),
+    };
+}
+/** Reports whether a proposal's first key-exchange and host-key choices match the negotiated result. */
+export function isKexGuessCorrect(proposal, selection) {
+    return proposal.kexAlgorithms[0] === selection.kexAlgorithm &&
+        proposal.serverHostKeyAlgorithms[0] === selection.serverHostKeyAlgorithm;
+}
 function validateKexInit(init) {
     if (init.cookie.length !== 16)
         throw new SSHKexError("SSH_MSG_KEXINIT cookie must contain exactly 16 bytes");
@@ -73,4 +93,17 @@ function validateKexInit(init) {
 function assertNonEmpty(value, name) {
     if (value.length === 0)
         throw new SSHKexError(`SSH_MSG_KEXINIT ${name} algorithms must not be empty`);
+}
+function selectRequired(client, server, name) {
+    const selected = selectOptional(client, server);
+    if (selected === undefined)
+        throw new SSHKexError(`SSH_MSG_KEXINIT has no shared ${name} algorithm`);
+    return selected;
+}
+function selectOptional(client, server) {
+    for (const algorithm of client) {
+        if (server.includes(algorithm))
+            return algorithm;
+    }
+    return undefined;
 }

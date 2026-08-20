@@ -1,6 +1,6 @@
 import { deepStrictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { formatKexInit, parseKexInit, SSHKexError } from "../kex.js";
+import { formatKexInit, isKexGuessCorrect, negotiateKexInit, parseKexInit, SSHKexError } from "../kex.js";
 function kexInit() {
     return {
         cookie: Uint8Array.from({ length: 16 }, (_, index) => index),
@@ -29,4 +29,35 @@ test("SSH_MSG_KEXINIT rejects invalid message, cookie, reserved field, and manda
     const reserved = formatKexInit(kexInit());
     reserved[reserved.length - 1] = 1;
     throws(() => parseKexInit(reserved), SSHKexError);
+});
+test("SSH_MSG_KEXINIT negotiation follows client preference and detects incorrect guesses", () => {
+    const client = {
+        ...kexInit(),
+        kexAlgorithms: ["curve25519-sha256", "diffie-hellman-group14-sha256"],
+        serverHostKeyAlgorithms: ["ssh-ed25519", "rsa-sha2-512"],
+    };
+    const server = {
+        ...kexInit(),
+        kexAlgorithms: ["diffie-hellman-group14-sha256", "curve25519-sha256"],
+        serverHostKeyAlgorithms: ["rsa-sha2-512", "ssh-ed25519"],
+        languagesClientToServer: ["en-US"],
+    };
+    const selection = negotiateKexInit(client, server);
+    deepStrictEqual(selection, {
+        kexAlgorithm: "curve25519-sha256",
+        serverHostKeyAlgorithm: "ssh-ed25519",
+        encryptionAlgorithmClientToServer: "chacha20-poly1305@openssh.com",
+        encryptionAlgorithmServerToClient: "chacha20-poly1305@openssh.com",
+        macAlgorithmClientToServer: "none",
+        macAlgorithmServerToClient: "none",
+        compressionAlgorithmClientToServer: "none",
+        compressionAlgorithmServerToClient: "none",
+        languageClientToServer: undefined,
+        languageServerToClient: undefined,
+    });
+    if (!isKexGuessCorrect(client, selection))
+        throw new Error("expected client guess to be correct");
+    if (isKexGuessCorrect({ ...server, kexAlgorithms: ["diffie-hellman-group14-sha256"] }, selection))
+        throw new Error("expected server guess to be incorrect");
+    throws(() => negotiateKexInit({ ...client, kexAlgorithms: ["none"] }, server), SSHKexError);
 });
