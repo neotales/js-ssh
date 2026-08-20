@@ -102,13 +102,15 @@ Deno.test("SSH name-lists reject empty and non-ASCII names", () => {
   assertThrows(() => new SSHWriter().writeNameList(["snowman-\u2603"]), RangeError);
   assertThrows(() => new SSHWriter().writeNameList(["a".repeat(65)]), RangeError);
 
-  for (const value of [
-    ",ssh-ed25519",
-    "ssh-ed25519,",
-    "ssh-ed25519,,ssh-rsa",
-    "ssh-\n",
-    "a".repeat(65),
-  ]) {
+  for (
+    const value of [
+      ",ssh-ed25519",
+      "ssh-ed25519,",
+      "ssh-ed25519,,ssh-rsa",
+      "ssh-\n",
+      "a".repeat(65),
+    ]
+  ) {
     const encoded = new SSHWriter().writeString(new TextEncoder().encode(value)).toUint8Array();
     assertThrows(() => new SSHReader(encoded).readNameList(), SSHParseError);
   }

@@ -1,7 +1,0 @@
-.vscode/
-.github/
-node_modules/
-npm/*/node_modules/
-npm/*/esm/
-npm/*/types/
-npm/*/.test/

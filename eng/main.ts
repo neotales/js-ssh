@@ -7,7 +7,6 @@ const workspace = dirname(root);
 const sourceDirectory = join(workspace, "jsr", "ssh");
 const packageDirectory = join(workspace, "npm", "ssh");
 const executableExtension = Deno.build.os === "windows" ? ".cmd" : "";
-const oxfmt = join(workspace, "node_modules", ".bin", `oxfmt${executableExtension}`);
 const oxlint = join(workspace, "node_modules", ".bin", `oxlint${executableExtension}`);
 
 type DenoPackage = {
@@ -25,7 +24,7 @@ Tasks:
   build                    Generate the npm package with dnt
   test [runtime flags]     Run SSH tests in selected runtimes
   lint                     Check TypeScript with oxlint
-  fmt [--check]            Format or check formatting with oxfmt
+  fmt [--check]            Format or check formatting with deno fmt
   audit                    Audit npm dependencies
   check                    Run the complete local quality gate
   pack                     Generate and pack the npm package
@@ -121,20 +120,21 @@ async function build(testBun = false): Promise<void> {
 }
 
 async function format(check: boolean): Promise<void> {
-  await run(oxfmt, [
-    check ? "--check" : "--write",
-    "--ignore-path",
-    ".prettierignore",
+  await run("deno", [
+    "fmt",
+    ...(check ? ["--check"] : []),
+    "--config",
+    join(workspace, "deno.json"),
     "eng",
     "jsr",
-    "npm",
+    ".github",
+    ".vscode",
     "README.md",
     "LICENSE.md",
     "deno.json",
     "package.json",
     "pnpm-workspace.yaml",
     ".oxlintrc.json",
-    ".oxfmtrc.json",
   ]);
 }
 

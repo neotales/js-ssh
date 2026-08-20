@@ -123,8 +123,9 @@ export class SSHReader {
         }
     }
     #require(length, message) {
-        if (length > this.remaining)
+        if (length > this.remaining) {
             throw new SSHParseError(message, this.#offset);
+        }
     }
 }
 /** Writer for the SSH data types defined by RFC 4251 section 5. */
@@ -165,8 +166,9 @@ export class SSHWriter {
         return this;
     }
     writeString(value) {
-        if (value.length > MAX_UINT32)
+        if (value.length > MAX_UINT32) {
             throw new RangeError("SSH string is too long");
+        }
         this.writeUint32(value.length);
         this.#ensure(value.length);
         this.#bytes.set(value, this.#length);
@@ -174,8 +176,9 @@ export class SSHWriter {
         return this;
     }
     writeMpint(value) {
-        if (value === 0n)
+        if (value === 0n) {
             return this.writeString(new Uint8Array());
+        }
         if (value > 0n) {
             const bytes = unsignedBytes(value);
             if ((bytes[0] & 0x80) === 0)
@@ -197,8 +200,9 @@ export class SSHWriter {
         return this.writeString(bytes);
     }
     writeNameList(names) {
-        for (const name of names)
+        for (const name of names) {
             validateName(name);
+        }
         return this.writeString(new TextEncoder().encode(names.join(",")));
     }
     /** Returns an owned copy of the encoded bytes. */
@@ -207,13 +211,16 @@ export class SSHWriter {
     }
     #ensure(additional) {
         const required = this.#length + additional;
-        if (!Number.isSafeInteger(required))
+        if (!Number.isSafeInteger(required)) {
             throw new RangeError("encoded SSH data is too large");
-        if (required <= this.#bytes.length)
+        }
+        if (required <= this.#bytes.length) {
             return;
+        }
         let capacity = this.#bytes.length;
-        while (capacity < required)
+        while (capacity < required) {
             capacity = Math.max(capacity * 2, required);
+        }
         const bytes = new Uint8Array(capacity);
         bytes.set(this.#bytes.subarray(0, this.#length));
         this.#bytes = bytes;
@@ -229,8 +236,9 @@ function unsignedBytes(value) {
     return Uint8Array.from(bytes);
 }
 function validateName(name) {
-    if (!name || name.length > 64)
+    if (!name || name.length > 64) {
         throw new RangeError("SSH names must contain 1 to 64 bytes");
+    }
     for (let index = 0; index < name.length; index++) {
         const code = name.charCodeAt(index);
         if (code < 0x21 || code > 0x7e || code === 0x2c) {

@@ -12,9 +12,9 @@
     "clean": "deno run -A ./eng/main.ts clean"
   },
   "fmt": {
-    "lineWidth": 100,
+    "lineWidth": 120,
     "singleQuote": false,
     "proseWrap": "preserve",
-    "exclude": ["npm/*/node_modules", "npm/*/esm", "npm/*/types", "npm/*/.test"]
+    "exclude": ["npm", "node_modules", "artifacts", "pnpm-lock.yaml"]
   }
 }
