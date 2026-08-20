@@ -37,6 +37,17 @@ export type SSHX25519KeyPair = {
     privateKey: CryptoKey;
     publicKey: Uint8Array;
 };
+/** Inputs bound into the curve25519-sha256 exchange hash. */
+export type SSHCurve25519ExchangeHashInput = {
+    clientIdentification: string;
+    serverIdentification: string;
+    clientKexInit: Uint8Array;
+    serverKexInit: Uint8Array;
+    hostKey: Uint8Array;
+    clientPublic: Uint8Array;
+    serverPublic: Uint8Array;
+    sharedSecret: Uint8Array;
+};
 /** Error raised when an SSH key-exchange message is malformed. */
 export declare class SSHKexError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -59,6 +70,8 @@ export declare function formatNewKeys(): Uint8Array;
 export declare function generateX25519KeyPair(): Promise<SSHX25519KeyPair>;
 /** Derives the 32-byte X25519 shared secret from an ephemeral private key and peer public key. */
 export declare function deriveX25519Secret(privateKey: CryptoKey, peerPublicKey: Uint8Array): Promise<Uint8Array>;
+/** Computes the RFC 8731 curve25519-sha256 exchange hash. */
+export declare function computeCurve25519Sha256ExchangeHash(input: SSHCurve25519ExchangeHashInput): Promise<Uint8Array>;
 /** Formats an SSH_MSG_KEXINIT payload. */
 export declare function formatKexInit(init: SSHKexInit): Uint8Array;
 /** Selects algorithms using the client proposal's preference order. */

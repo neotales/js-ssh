@@ -106,6 +106,31 @@ export async function deriveX25519Secret(privateKey, peerPublicKey) {
     const peerKey = await crypto.subtle.importKey("raw", peerBytes.buffer, { name: "X25519" }, false, []);
     return new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: peerKey }, privateKey, 256));
 }
+/** Computes the RFC 8731 curve25519-sha256 exchange hash. */
+export async function computeCurve25519Sha256ExchangeHash(input) {
+    assertIdentification(input.clientIdentification, "client");
+    assertIdentification(input.serverIdentification, "server");
+    assertNonEmptyBytes(input.clientKexInit, "client KEXINIT");
+    assertNonEmptyBytes(input.serverKexInit, "server KEXINIT");
+    assertNonEmptyBytes(input.hostKey, "server host key");
+    assertX25519PublicKey(input.clientPublic);
+    assertX25519PublicKey(input.serverPublic);
+    assertX25519PublicKey(input.sharedSecret);
+    if (input.sharedSecret.every((byte) => byte === 0))
+        throw new SSHKexError("X25519 shared secret must not be all zeroes");
+    const encoder = new TextEncoder();
+    const encoded = new SSHWriter()
+        .writeString(encoder.encode(input.clientIdentification))
+        .writeString(encoder.encode(input.serverIdentification))
+        .writeString(input.clientKexInit)
+        .writeString(input.serverKexInit)
+        .writeString(input.hostKey)
+        .writeString(input.clientPublic)
+        .writeString(input.serverPublic)
+        .writeMpint(x25519SecretToMpint(input.sharedSecret))
+        .toUint8Array();
+    return new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(encoded).buffer));
+}
 /** Formats an SSH_MSG_KEXINIT payload. */
 export function formatKexInit(init) {
     validateKexInit(init);
@@ -184,4 +209,20 @@ function assertNonEmptyBytes(value, name) {
 function assertX25519PublicKey(value) {
     if (value.length !== X25519_PUBLIC_KEY_LENGTH)
         throw new SSHKexError("X25519 public keys must contain exactly 32 bytes");
+}
+function assertIdentification(value, role) {
+    if (!value.startsWith("SSH-"))
+        throw new SSHKexError(`${role} identification must start with SSH-`);
+    for (let index = 0; index < value.length; index++) {
+        const code = value.charCodeAt(index);
+        if (code < 0x20 || code > 0x7e)
+            throw new SSHKexError(`${role} identification must use printable US-ASCII`);
+    }
+}
+function x25519SecretToMpint(secret) {
+    let value = 0n;
+    for (let index = secret.length - 1; index >= 0; index--) {
+        value = (value << 8n) | BigInt(secret[index]);
+    }
+    return value;
 }

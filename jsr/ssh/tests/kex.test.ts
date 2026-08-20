@@ -1,6 +1,7 @@
-import { deepStrictEqual, rejects, strictEqual, throws } from "node:assert/strict";
+import { deepStrictEqual, notDeepStrictEqual, rejects, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
 import {
+  computeCurve25519Sha256ExchangeHash,
   deriveX25519Secret,
   formatKexEcdhInit,
   formatKexEcdhReply,
@@ -101,4 +102,27 @@ test("X25519 peers derive the same 32-byte shared secret", async () => {
     await deriveX25519Secret(server.privateKey, client.publicKey),
   );
   await rejects(() => deriveX25519Secret(client.privateKey, new Uint8Array(31)), SSHKexError);
+});
+
+test("curve25519-sha256 exchange hashes bind every negotiated transcript field", async () => {
+  const input = {
+    clientIdentification: "SSH-2.0-client",
+    serverIdentification: "SSH-2.0-server",
+    clientKexInit: Uint8Array.of(20, 1),
+    serverKexInit: Uint8Array.of(20, 2),
+    hostKey: Uint8Array.of(3),
+    clientPublic: Uint8Array.from({ length: 32 }, (_, index) => index + 1),
+    serverPublic: Uint8Array.from({ length: 32 }, (_, index) => index + 33),
+    sharedSecret: Uint8Array.from({ length: 32 }, (_, index) => index + 65),
+  };
+  const hash = await computeCurve25519Sha256ExchangeHash(input);
+  strictEqual(hash.length, 32);
+  notDeepStrictEqual(
+    hash,
+    await computeCurve25519Sha256ExchangeHash({ ...input, serverKexInit: Uint8Array.of(20, 3) }),
+  );
+  await rejects(
+    () => computeCurve25519Sha256ExchangeHash({ ...input, sharedSecret: new Uint8Array(32) }),
+    SSHKexError,
+  );
 });

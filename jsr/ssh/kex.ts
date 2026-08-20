@@ -5,6 +5,7 @@
  */
 
 export {
+  computeCurve25519Sha256ExchangeHash,
   deriveX25519Secret,
   formatKexEcdhInit,
   formatKexEcdhReply,
@@ -17,6 +18,7 @@ export {
   parseKexEcdhReply,
   parseKexInit,
   parseNewKeys,
+  type SSHCurve25519ExchangeHashInput,
   type SSHKexEcdhReply,
   SSHKexError,
   type SSHKexInit,
