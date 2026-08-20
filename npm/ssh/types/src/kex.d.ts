@@ -26,12 +26,30 @@ export type SSHKexSelection = {
     languageClientToServer?: string;
     languageServerToClient?: string;
 };
+/** Fields carried by SSH_MSG_KEX_ECDH_REPLY. */
+export type SSHKexEcdhReply = {
+    hostKey: Uint8Array;
+    serverPublic: Uint8Array;
+    signature: Uint8Array;
+};
 /** Error raised when an SSH key-exchange message is malformed. */
 export declare class SSHKexError extends Error {
     constructor(message: string, options?: ErrorOptions);
 }
 /** Parses a complete SSH_MSG_KEXINIT payload. */
 export declare function parseKexInit(payload: Uint8Array): SSHKexInit;
+/** Parses SSH_MSG_KEX_ECDH_INIT and returns the client's encoded public key. */
+export declare function parseKexEcdhInit(payload: Uint8Array): Uint8Array;
+/** Formats SSH_MSG_KEX_ECDH_INIT from a client's encoded public key. */
+export declare function formatKexEcdhInit(clientPublic: Uint8Array): Uint8Array;
+/** Parses SSH_MSG_KEX_ECDH_REPLY. */
+export declare function parseKexEcdhReply(payload: Uint8Array): SSHKexEcdhReply;
+/** Formats SSH_MSG_KEX_ECDH_REPLY. */
+export declare function formatKexEcdhReply(reply: SSHKexEcdhReply): Uint8Array;
+/** Parses SSH_MSG_NEWKEYS. */
+export declare function parseNewKeys(payload: Uint8Array): void;
+/** Formats SSH_MSG_NEWKEYS. */
+export declare function formatNewKeys(): Uint8Array;
 /** Formats an SSH_MSG_KEXINIT payload. */
 export declare function formatKexInit(init: SSHKexInit): Uint8Array;
 /** Selects algorithms using the client proposal's preference order. */

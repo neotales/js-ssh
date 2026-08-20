@@ -3,4 +3,4 @@
  *
  * @module @neotales/ssh/kex
  */
-export { formatKexInit, isKexGuessCorrect, negotiateKexInit, parseKexInit, SSHKexError, } from "./src/kex.js";
+export { formatKexEcdhInit, formatKexEcdhReply, formatKexInit, formatNewKeys, isKexGuessCorrect, negotiateKexInit, parseKexEcdhInit, parseKexEcdhReply, parseKexInit, parseNewKeys, SSHKexError, } from "./src/kex.js";

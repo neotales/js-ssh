@@ -1,5 +1,8 @@
 import { SSHReader, SSHWriter } from "./wire.js";
 const SSH_MSG_KEXINIT = 20;
+const SSH_MSG_NEWKEYS = 21;
+const SSH_MSG_KEX_ECDH_INIT = 30;
+const SSH_MSG_KEX_ECDH_REPLY = 31;
 /** Error raised when an SSH key-exchange message is malformed. */
 export class SSHKexError extends Error {
     constructor(message, options) {
@@ -35,6 +38,56 @@ export function parseKexInit(payload) {
     reader.assertDone();
     validateKexInit(init);
     return init;
+}
+/** Parses SSH_MSG_KEX_ECDH_INIT and returns the client's encoded public key. */
+export function parseKexEcdhInit(payload) {
+    const reader = new SSHReader(payload);
+    if (reader.readByte() !== SSH_MSG_KEX_ECDH_INIT)
+        throw new SSHKexError("expected SSH_MSG_KEX_ECDH_INIT");
+    const clientPublic = reader.readString();
+    reader.assertDone();
+    assertNonEmptyBytes(clientPublic, "client public key");
+    return clientPublic;
+}
+/** Formats SSH_MSG_KEX_ECDH_INIT from a client's encoded public key. */
+export function formatKexEcdhInit(clientPublic) {
+    assertNonEmptyBytes(clientPublic, "client public key");
+    return new SSHWriter().writeByte(SSH_MSG_KEX_ECDH_INIT).writeString(clientPublic).toUint8Array();
+}
+/** Parses SSH_MSG_KEX_ECDH_REPLY. */
+export function parseKexEcdhReply(payload) {
+    const reader = new SSHReader(payload);
+    if (reader.readByte() !== SSH_MSG_KEX_ECDH_REPLY)
+        throw new SSHKexError("expected SSH_MSG_KEX_ECDH_REPLY");
+    const reply = { hostKey: reader.readString(), serverPublic: reader.readString(), signature: reader.readString() };
+    reader.assertDone();
+    assertNonEmptyBytes(reply.hostKey, "server host key");
+    assertNonEmptyBytes(reply.serverPublic, "server public key");
+    assertNonEmptyBytes(reply.signature, "exchange signature");
+    return reply;
+}
+/** Formats SSH_MSG_KEX_ECDH_REPLY. */
+export function formatKexEcdhReply(reply) {
+    assertNonEmptyBytes(reply.hostKey, "server host key");
+    assertNonEmptyBytes(reply.serverPublic, "server public key");
+    assertNonEmptyBytes(reply.signature, "exchange signature");
+    return new SSHWriter()
+        .writeByte(SSH_MSG_KEX_ECDH_REPLY)
+        .writeString(reply.hostKey)
+        .writeString(reply.serverPublic)
+        .writeString(reply.signature)
+        .toUint8Array();
+}
+/** Parses SSH_MSG_NEWKEYS. */
+export function parseNewKeys(payload) {
+    const reader = new SSHReader(payload);
+    if (reader.readByte() !== SSH_MSG_NEWKEYS)
+        throw new SSHKexError("expected SSH_MSG_NEWKEYS");
+    reader.assertDone();
+}
+/** Formats SSH_MSG_NEWKEYS. */
+export function formatNewKeys() {
+    return Uint8Array.of(SSH_MSG_NEWKEYS);
 }
 /** Formats an SSH_MSG_KEXINIT payload. */
 export function formatKexInit(init) {
@@ -106,4 +159,8 @@ function selectOptional(client, server) {
             return algorithm;
     }
     return undefined;
+}
+function assertNonEmptyBytes(value, name) {
+    if (value.length === 0)
+        throw new SSHKexError(`SSH ${name} must not be empty`);
 }

@@ -1,6 +1,6 @@
 import { deepStrictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { formatKexInit, isKexGuessCorrect, negotiateKexInit, parseKexInit, SSHKexError } from "../kex.js";
+import { formatKexEcdhInit, formatKexEcdhReply, formatKexInit, formatNewKeys, isKexGuessCorrect, negotiateKexInit, parseKexEcdhInit, parseKexEcdhReply, parseKexInit, parseNewKeys, SSHKexError, } from "../kex.js";
 function kexInit() {
     return {
         cookie: Uint8Array.from({ length: 16 }, (_, index) => index),
@@ -60,4 +60,13 @@ test("SSH_MSG_KEXINIT negotiation follows client preference and detects incorrec
     if (isKexGuessCorrect({ ...server, kexAlgorithms: ["diffie-hellman-group14-sha256"] }, selection))
         throw new Error("expected server guess to be incorrect");
     throws(() => negotiateKexInit({ ...client, kexAlgorithms: ["none"] }, server), SSHKexError);
+});
+test("ECDH key-exchange messages preserve public keys, signatures, and NEWKEYS framing", () => {
+    const clientPublic = Uint8Array.of(1, 2, 3);
+    deepStrictEqual(parseKexEcdhInit(formatKexEcdhInit(clientPublic)), clientPublic);
+    const reply = { hostKey: Uint8Array.of(4), serverPublic: Uint8Array.of(5, 6), signature: Uint8Array.of(7, 8, 9) };
+    deepStrictEqual(parseKexEcdhReply(formatKexEcdhReply(reply)), reply);
+    parseNewKeys(formatNewKeys());
+    throws(() => formatKexEcdhInit(new Uint8Array()), SSHKexError);
+    throws(() => parseNewKeys(Uint8Array.of(21, 0)));
 });
