@@ -87,7 +87,9 @@ export class SSHReader {
   readMpint(): bigint {
     const offset = this.#offset;
     const bytes = this.readString();
-    if (bytes.length === 0) return 0n;
+    if (bytes.length === 0) {
+      return 0n;
+    }
 
     if (bytes[0] === 0) {
       if (bytes.length === 1 || (bytes[1] & 0x80) === 0) {
@@ -106,13 +108,17 @@ export class SSHReader {
   readNameList(): string[] {
     const offset = this.#offset;
     const bytes = this.readString();
-    if (bytes.length === 0) return [];
+    if (bytes.length === 0) {
+      return [];
+    }
 
     const names: string[] = [];
     let name = "";
     for (const byte of bytes) {
       if (byte === 0x2c) {
-        if (!name) throw new SSHParseError("name-list contains an empty name", offset);
+        if (!name) {
+          throw new SSHParseError("name-list contains an empty name", offset);
+        }
         names.push(name);
         name = "";
       } else {
@@ -125,7 +131,9 @@ export class SSHReader {
         name += String.fromCharCode(byte);
       }
     }
-    if (!name) throw new SSHParseError("name-list contains an empty name", offset);
+    if (!name) {
+      throw new SSHParseError("name-list contains an empty name", offset);
+    }
     names.push(name);
     return names;
   }
@@ -209,7 +217,9 @@ export class SSHWriter {
 
     if (value > 0n) {
       const bytes = unsignedBytes(value);
-      if ((bytes[0] & 0x80) === 0) return this.writeString(bytes);
+      if ((bytes[0] & 0x80) === 0) {
+        return this.writeString(bytes);
+      }
       const prefixed = new Uint8Array(bytes.length + 1);
       prefixed.set(bytes, 1);
       return this.writeString(prefixed);

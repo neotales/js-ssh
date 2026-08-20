@@ -105,7 +105,9 @@ async function build(): Promise<void> {
     for (const name of ["node_modules", "pnpm-lock.yaml", "pnpm-workspace.yaml"]) {
       await Deno.remove(join(outputDirectory, name), { recursive: true }).catch(
         (error: unknown) => {
-          if (!(error instanceof Deno.errors.NotFound)) throw error;
+          if (!(error instanceof Deno.errors.NotFound)) {
+            throw error;
+          }
         },
       );
     }
@@ -113,7 +115,9 @@ async function build(): Promise<void> {
     await Deno.rename(outputDirectory, packageDirectory);
   } finally {
     await Deno.remove(outputDirectory, { recursive: true }).catch((error: unknown) => {
-      if (!(error instanceof Deno.errors.NotFound)) throw error;
+      if (!(error instanceof Deno.errors.NotFound)) {
+        throw error;
+      }
     });
   }
 }
@@ -165,7 +169,9 @@ async function test(runtimes: Set<string>): Promise<void> {
 async function clean(): Promise<void> {
   await Deno.remove(join(packageDirectory, "node_modules"), { recursive: true }).catch(
     (error: unknown) => {
-      if (!(error instanceof Deno.errors.NotFound)) throw error;
+      if (!(error instanceof Deno.errors.NotFound)) {
+        throw error;
+      }
     },
   );
   for await (const entry of Deno.readDir(packageDirectory)) {
@@ -180,7 +186,9 @@ const runtimes = new Set(args.filter((arg) => arg.startsWith("--")).map((arg) =>
 const unknownRuntimes = [...runtimes].filter(
   (runtime) => !["node", "deno", "bun", "check"].includes(runtime),
 );
-if (unknownRuntimes.length) usage();
+if (unknownRuntimes.length) {
+  usage();
+}
 
 switch (command) {
   case "build":

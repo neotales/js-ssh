@@ -1,13 +1,7 @@
 import { SSHParseError, SSHReader } from "./wire.js";
+import { SSHKeyError } from "./key_error.js";
 const MAX_KEY_TYPE_LENGTH = 64;
 const BASE64_CHUNK_LENGTH = 0x8000;
-/** Error raised when an SSH public-key value or its text encoding is malformed. */
-export class SSHKeyError extends Error {
-    constructor(message, options) {
-        super(message, options);
-        this.name = "SSHKeyError";
-    }
-}
 /** Parsed public key in the SSH wire format defined by RFC 4253 section 6.6. */
 export class SSHPublicKey {
     type;
@@ -46,11 +40,13 @@ export function parseAuthorizedKey(line) {
         throw new SSHKeyError("invalid authorized-key line");
     }
     const encodedStart = skipHorizontalWhitespace(text, typeEnd);
-    if (encodedStart === typeEnd)
+    if (encodedStart === typeEnd) {
         throw new SSHKeyError("invalid authorized-key line");
+    }
     const encodedEnd = readAuthorizedKeyFieldEnd(text, encodedStart);
-    if (encodedEnd === encodedStart)
+    if (encodedEnd === encodedStart) {
         throw new SSHKeyError("invalid authorized-key line");
+    }
     const commentStart = skipHorizontalWhitespace(text, encodedEnd);
     const wire = decodeBase64(text.slice(encodedStart, encodedEnd));
     const key = parsePublicKey(wire);
@@ -155,8 +151,9 @@ function decodeBase64(encoded) {
         return bytes;
     }
     catch (error) {
-        if (error instanceof SSHKeyError)
+        if (error instanceof SSHKeyError) {
             throw error;
+        }
         throw new SSHKeyError("authorized-key public-key blob is not valid Base64", { cause: error });
     }
 }
@@ -190,25 +187,29 @@ function skipHorizontalWhitespace(text, start) {
     return index;
 }
 function isCanonicalBase64(encoded) {
-    if (encoded.length === 0 || encoded.length % 4 !== 0)
+    if (encoded.length === 0 || encoded.length % 4 !== 0) {
         return false;
+    }
     let padding = 0;
     for (let index = encoded.length - 1; index >= 0 && encoded.charCodeAt(index) === 0x3d; index--) {
         padding++;
     }
-    if (padding > 2 || (padding > 0 && encoded.length - padding < 2))
+    if (padding > 2 || (padding > 0 && encoded.length - padding < 2)) {
         return false;
+    }
     const contentLength = encoded.length - padding;
     for (let index = 0; index < contentLength; index++) {
         const code = encoded.charCodeAt(index);
         const isLetter = (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a);
         const isDigit = code >= 0x30 && code <= 0x39;
-        if (!isLetter && !isDigit && code !== 0x2b && code !== 0x2f)
+        if (!isLetter && !isDigit && code !== 0x2b && code !== 0x2f) {
             return false;
+        }
     }
     for (let index = contentLength; index < encoded.length; index++) {
-        if (encoded.charCodeAt(index) !== 0x3d)
+        if (encoded.charCodeAt(index) !== 0x3d) {
             return false;
+        }
     }
     return true;
 }

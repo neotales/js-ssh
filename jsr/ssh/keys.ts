@@ -10,6 +10,7 @@ export {
   formatAuthorizedKey,
   parseAuthorizedKey,
   parsePublicKey,
-  SSHKeyError,
   SSHPublicKey,
 } from "./src/public_key.ts";
+export { SSHKeyError } from "./src/key_error.ts";
+export { parseSignature, SSHSignature } from "./src/signature.ts";

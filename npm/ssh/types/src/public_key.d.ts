@@ -1,7 +1,3 @@
-/** Error raised when an SSH public-key value or its text encoding is malformed. */
-export declare class SSHKeyError extends Error {
-    constructor(message: string, options?: ErrorOptions);
-}
 /** Parsed public key in the SSH wire format defined by RFC 4253 section 6.6. */
 export declare class SSHPublicKey {
     #private;

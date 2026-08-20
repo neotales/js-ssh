@@ -3,4 +3,6 @@
  *
  * @module @neotales/ssh/keys
  */
-export { type AuthorizedKey, fingerprintSHA256, formatAuthorizedKey, parseAuthorizedKey, parsePublicKey, SSHKeyError, SSHPublicKey, } from "./src/public_key.js";
+export { type AuthorizedKey, fingerprintSHA256, formatAuthorizedKey, parseAuthorizedKey, parsePublicKey, SSHPublicKey, } from "./src/public_key.js";
+export { SSHKeyError } from "./src/key_error.js";
+export { parseSignature, SSHSignature } from "./src/signature.js";

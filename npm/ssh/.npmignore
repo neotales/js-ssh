@@ -3,6 +3,8 @@
 /types/tests/keys.test.d.ts
 /esm/tests/primitives.test.js
 /types/tests/primitives.test.d.ts
+/esm/tests/signature.test.js
+/types/tests/signature.test.d.ts
 /test_runner.cjs
 yarn.lock
 pnpm-lock.yaml

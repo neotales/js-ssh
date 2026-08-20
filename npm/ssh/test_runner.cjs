@@ -4,6 +4,7 @@ const process = require("process");
 const filePaths = [
     "tests/keys.test.js",
     "tests/primitives.test.js",
+    "tests/signature.test.js",
 ];
 async function main() {
     const fileIndexArg = process.argv[2];
