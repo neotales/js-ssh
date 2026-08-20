@@ -1,4 +1,6 @@
 /src/
+/esm/tests/identification.test.js
+/types/tests/identification.test.d.ts
 /esm/tests/keys.test.js
 /types/tests/keys.test.d.ts
 /esm/tests/known_hosts.test.js

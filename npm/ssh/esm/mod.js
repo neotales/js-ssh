@@ -6,3 +6,4 @@
 export * from "./primitives.js";
 export * from "./keys.js";
 export * from "./known_hosts.js";
+export * from "./identification.js";

@@ -26,6 +26,12 @@
         "default": "./esm/mod.js"
       }
     },
+    "./identification": {
+      "import": {
+        "types": "./types/identification.d.ts",
+        "default": "./esm/identification.js"
+      }
+    },
     "./keys": {
       "import": {
         "types": "./types/keys.d.ts",
