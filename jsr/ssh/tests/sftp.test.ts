@@ -6,12 +6,17 @@ import {
   formatSftpData,
   formatSftpHandle,
   formatSftpInit,
+  formatSftpMkdirRequest,
   formatSftpName,
   formatSftpOpenDirRequest,
   formatSftpOpenRequest,
   formatSftpPacket,
   formatSftpReadDirRequest,
   formatSftpReadRequest,
+  formatSftpRealPathRequest,
+  formatSftpRemoveRequest,
+  formatSftpRenameRequest,
+  formatSftpRmdirRequest,
   formatSftpStatRequest,
   formatSftpStatus,
   formatSftpVersion,
@@ -21,11 +26,16 @@ import {
   parseSftpData,
   parseSftpHandle,
   parseSftpInit,
+  parseSftpMkdirRequest,
   parseSftpName,
   parseSftpOpenDirRequest,
   parseSftpOpenRequest,
   parseSftpReadDirRequest,
   parseSftpReadRequest,
+  parseSftpRealPathRequest,
+  parseSftpRemoveRequest,
+  parseSftpRenameRequest,
+  parseSftpRmdirRequest,
   parseSftpStatRequest,
   parseSftpStatus,
   parseSftpVersion,
@@ -132,4 +142,24 @@ test("SFTP directory messages preserve handles and entry attributes", () => {
   };
   const nameWire = formatSftpName(name);
   deepStrictEqual(parseSftpName(nameWire), { ...name, consumed: nameWire.length });
+});
+
+test("SFTP path management messages preserve paths and attributes", () => {
+  const path = { id: 8, path: "/old.txt" };
+  for (
+    const [format, parse] of [
+      [formatSftpRemoveRequest, parseSftpRemoveRequest],
+      [formatSftpRmdirRequest, parseSftpRmdirRequest],
+      [formatSftpRealPathRequest, parseSftpRealPathRequest],
+    ] as const
+  ) {
+    const wire = format(path);
+    deepStrictEqual(parse(wire), { ...path, consumed: wire.length });
+  }
+  const mkdir = { id: 9, path: "/new", attributes: { permissions: 0o40755 } };
+  const mkdirWire = formatSftpMkdirRequest(mkdir);
+  deepStrictEqual(parseSftpMkdirRequest(mkdirWire), { ...mkdir, consumed: mkdirWire.length });
+  const rename = { id: 10, oldPath: "/old.txt", newPath: "/new.txt" };
+  const renameWire = formatSftpRenameRequest(rename);
+  deepStrictEqual(parseSftpRenameRequest(renameWire), { ...rename, consumed: renameWire.length });
 });

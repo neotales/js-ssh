@@ -102,6 +102,21 @@ export type SFTPName = {
     id: number;
     entries: readonly SFTPNameEntry[];
 };
+/** SFTP request addressing one path. */
+export type SFTPPathRequest = {
+    id: number;
+    path: string;
+};
+/** SSH_FXP_MKDIR request. */
+export type SFTPMkdirRequest = SFTPPathRequest & {
+    attributes: SFTPAttributes;
+};
+/** SSH_FXP_RENAME request. */
+export type SFTPRenameRequest = {
+    id: number;
+    oldPath: string;
+    newPath: string;
+};
 /** Error raised when an SFTP packet is malformed or exceeds configured limits. */
 export declare class SFTPError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -186,6 +201,36 @@ export declare function parseSftpReadDirRequest(input: Uint8Array): (SFTPReadDir
 export declare function formatSftpName(response: SFTPName): Uint8Array;
 /** Parses SSH_FXP_NAME. */
 export declare function parseSftpName(input: Uint8Array): (SFTPName & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_REMOVE. */
+export declare function formatSftpRemoveRequest(request: SFTPPathRequest): Uint8Array;
+/** Parses SSH_FXP_REMOVE. */
+export declare function parseSftpRemoveRequest(input: Uint8Array): (SFTPPathRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_MKDIR. */
+export declare function formatSftpMkdirRequest(request: SFTPMkdirRequest): Uint8Array;
+/** Parses SSH_FXP_MKDIR. */
+export declare function parseSftpMkdirRequest(input: Uint8Array): (SFTPMkdirRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_RMDIR. */
+export declare function formatSftpRmdirRequest(request: SFTPPathRequest): Uint8Array;
+/** Parses SSH_FXP_RMDIR. */
+export declare function parseSftpRmdirRequest(input: Uint8Array): (SFTPPathRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_REALPATH. */
+export declare function formatSftpRealPathRequest(request: SFTPPathRequest): Uint8Array;
+/** Parses SSH_FXP_REALPATH. */
+export declare function parseSftpRealPathRequest(input: Uint8Array): (SFTPPathRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_RENAME. */
+export declare function formatSftpRenameRequest(request: SFTPRenameRequest): Uint8Array;
+/** Parses SSH_FXP_RENAME. */
+export declare function parseSftpRenameRequest(input: Uint8Array): (SFTPRenameRequest & {
     consumed: number;
 }) | undefined;
 /** Formats SSH_FXP_ATTRS. */

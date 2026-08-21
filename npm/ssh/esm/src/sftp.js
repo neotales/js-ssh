@@ -8,6 +8,11 @@ const SSH_FXP_WRITE = 6;
 const SSH_FXP_STAT = 17;
 const SSH_FXP_OPENDIR = 11;
 const SSH_FXP_READDIR = 12;
+const SSH_FXP_REMOVE = 13;
+const SSH_FXP_MKDIR = 14;
+const SSH_FXP_RMDIR = 15;
+const SSH_FXP_REALPATH = 16;
+const SSH_FXP_RENAME = 18;
 const SSH_FXP_STATUS = 101;
 const SSH_FXP_HANDLE = 102;
 const SSH_FXP_DATA = 103;
@@ -291,6 +296,72 @@ export function parseSftpName(input) {
     reader.assertDone();
     return { id, entries, consumed: packet.consumed };
 }
+/** Formats SSH_FXP_REMOVE. */
+export function formatSftpRemoveRequest(request) {
+    return formatPathRequest(SSH_FXP_REMOVE, request);
+}
+/** Parses SSH_FXP_REMOVE. */
+export function parseSftpRemoveRequest(input) {
+    return parsePathRequest(input, SSH_FXP_REMOVE, "SSH_FXP_REMOVE");
+}
+/** Formats SSH_FXP_MKDIR. */
+export function formatSftpMkdirRequest(request) {
+    const writer = new SSHWriter().writeUint32(request.id).writeString(encodeUtf8(request.path, "SFTP path"));
+    writeAttributes(writer, request.attributes);
+    return formatSftpPacket(SSH_FXP_MKDIR, writer.toUint8Array());
+}
+/** Parses SSH_FXP_MKDIR. */
+export function parseSftpMkdirRequest(input) {
+    const packet = expectPacket(input, SSH_FXP_MKDIR, "SSH_FXP_MKDIR");
+    if (!packet)
+        return undefined;
+    const reader = new SSHReader(packet.payload);
+    const request = {
+        id: reader.readUint32(),
+        path: decodeUtf8(reader.readString(), "SFTP path"),
+        attributes: readAttributes(reader),
+    };
+    reader.assertDone();
+    return { ...request, consumed: packet.consumed };
+}
+/** Formats SSH_FXP_RMDIR. */
+export function formatSftpRmdirRequest(request) {
+    return formatPathRequest(SSH_FXP_RMDIR, request);
+}
+/** Parses SSH_FXP_RMDIR. */
+export function parseSftpRmdirRequest(input) {
+    return parsePathRequest(input, SSH_FXP_RMDIR, "SSH_FXP_RMDIR");
+}
+/** Formats SSH_FXP_REALPATH. */
+export function formatSftpRealPathRequest(request) {
+    return formatPathRequest(SSH_FXP_REALPATH, request);
+}
+/** Parses SSH_FXP_REALPATH. */
+export function parseSftpRealPathRequest(input) {
+    return parsePathRequest(input, SSH_FXP_REALPATH, "SSH_FXP_REALPATH");
+}
+/** Formats SSH_FXP_RENAME. */
+export function formatSftpRenameRequest(request) {
+    return formatSftpPacket(SSH_FXP_RENAME, new SSHWriter()
+        .writeUint32(request.id)
+        .writeString(encodeUtf8(request.oldPath, "SFTP old path"))
+        .writeString(encodeUtf8(request.newPath, "SFTP new path"))
+        .toUint8Array());
+}
+/** Parses SSH_FXP_RENAME. */
+export function parseSftpRenameRequest(input) {
+    const packet = expectPacket(input, SSH_FXP_RENAME, "SSH_FXP_RENAME");
+    if (!packet)
+        return undefined;
+    const reader = new SSHReader(packet.payload);
+    const request = {
+        id: reader.readUint32(),
+        oldPath: decodeUtf8(reader.readString(), "SFTP old path"),
+        newPath: decodeUtf8(reader.readString(), "SFTP new path"),
+    };
+    reader.assertDone();
+    return { ...request, consumed: packet.consumed };
+}
 /** Formats SSH_FXP_ATTRS. */
 export function formatSftpAttributes(id, attributes) {
     const writer = new SSHWriter().writeUint32(id);
@@ -397,6 +468,18 @@ function expectPacket(input, type, name) {
     if (packet.type !== type)
         throw new SFTPError(`expected ${name}`);
     return packet;
+}
+function formatPathRequest(type, request) {
+    return formatSftpPacket(type, new SSHWriter().writeUint32(request.id).writeString(encodeUtf8(request.path, "SFTP path")).toUint8Array());
+}
+function parsePathRequest(input, type, name) {
+    const packet = expectPacket(input, type, name);
+    if (!packet)
+        return undefined;
+    const reader = new SSHReader(packet.payload);
+    const request = { id: reader.readUint32(), path: decodeUtf8(reader.readString(), "SFTP path") };
+    reader.assertDone();
+    return { ...request, consumed: packet.consumed };
 }
 function requireHandle(handle) {
     if (handle.length === 0)
