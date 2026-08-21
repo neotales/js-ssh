@@ -1,6 +1,6 @@
 import { deepStrictEqual, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { formatSftpAttributes, formatSftpCloseRequest, formatSftpData, formatSftpHandle, formatSftpInit, formatSftpOpenRequest, formatSftpPacket, formatSftpReadRequest, formatSftpStatRequest, formatSftpStatus, formatSftpVersion, formatSftpWriteRequest, parseSftpAttributes, parseSftpCloseRequest, parseSftpData, parseSftpHandle, parseSftpInit, parseSftpOpenRequest, parseSftpReadRequest, parseSftpStatRequest, parseSftpStatus, parseSftpVersion, parseSftpWriteRequest, readSftpPacket, SFTPError, } from "../sftp.js";
+import { formatSftpAttributes, formatSftpCloseRequest, formatSftpData, formatSftpHandle, formatSftpInit, formatSftpName, formatSftpOpenDirRequest, formatSftpOpenRequest, formatSftpPacket, formatSftpReadDirRequest, formatSftpReadRequest, formatSftpStatRequest, formatSftpStatus, formatSftpVersion, formatSftpWriteRequest, parseSftpAttributes, parseSftpCloseRequest, parseSftpData, parseSftpHandle, parseSftpInit, parseSftpName, parseSftpOpenDirRequest, parseSftpOpenRequest, parseSftpReadDirRequest, parseSftpReadRequest, parseSftpStatRequest, parseSftpStatus, parseSftpVersion, parseSftpWriteRequest, readSftpPacket, SFTPError, } from "../sftp.js";
 test("SFTP framing reads complete packets and preserves trailing data", () => {
     const first = formatSftpPacket(200, Uint8Array.of(1, 2));
     const second = formatSftpPacket(201, Uint8Array.of(3));
@@ -76,4 +76,22 @@ test("SFTP stat and attributes support v3 metadata fields", () => {
     const attrsWire = formatSftpAttributes(5, attributes);
     deepStrictEqual(parseSftpAttributes(attrsWire), { id: 5, attributes, consumed: attrsWire.length });
     throws(() => formatSftpAttributes(1, { uid: 1 }), SFTPError);
+});
+test("SFTP directory messages preserve handles and entry attributes", () => {
+    const open = { id: 6, path: "/dir" };
+    const openWire = formatSftpOpenDirRequest(open);
+    deepStrictEqual(parseSftpOpenDirRequest(openWire), { ...open, consumed: openWire.length });
+    const read = { id: 7, handle: Uint8Array.of(1, 2) };
+    const readWire = formatSftpReadDirRequest(read);
+    deepStrictEqual(parseSftpReadDirRequest(readWire), { ...read, consumed: readWire.length });
+    const name = {
+        id: 7,
+        entries: [{
+                filename: "file.txt",
+                longname: "-rw-r--r-- file.txt",
+                attributes: { size: 4n, permissions: 0o100644 },
+            }],
+    };
+    const nameWire = formatSftpName(name);
+    deepStrictEqual(parseSftpName(nameWire), { ...name, consumed: nameWire.length });
 });

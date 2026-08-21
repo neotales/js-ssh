@@ -81,6 +81,27 @@ export type SFTPStatRequest = {
     id: number;
     path: string;
 };
+/** SSH_FXP_OPENDIR request. */
+export type SFTPOpenDirRequest = {
+    id: number;
+    path: string;
+};
+/** SSH_FXP_READDIR request. */
+export type SFTPReadDirRequest = {
+    id: number;
+    handle: Uint8Array;
+};
+/** One SSH_FXP_NAME directory entry. */
+export type SFTPNameEntry = {
+    filename: string;
+    longname: string;
+    attributes: SFTPAttributes;
+};
+/** SSH_FXP_NAME response. */
+export type SFTPName = {
+    id: number;
+    entries: readonly SFTPNameEntry[];
+};
 /** Error raised when an SFTP packet is malformed or exceeds configured limits. */
 export declare class SFTPError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -147,6 +168,24 @@ export declare function parseSftpStatus(input: Uint8Array): (SFTPStatus & {
 export declare function formatSftpStatRequest(request: SFTPStatRequest): Uint8Array;
 /** Parses SSH_FXP_STAT. */
 export declare function parseSftpStatRequest(input: Uint8Array): (SFTPStatRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_OPENDIR. */
+export declare function formatSftpOpenDirRequest(request: SFTPOpenDirRequest): Uint8Array;
+/** Parses SSH_FXP_OPENDIR. */
+export declare function parseSftpOpenDirRequest(input: Uint8Array): (SFTPOpenDirRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_READDIR. */
+export declare function formatSftpReadDirRequest(request: SFTPReadDirRequest): Uint8Array;
+/** Parses SSH_FXP_READDIR. */
+export declare function parseSftpReadDirRequest(input: Uint8Array): (SFTPReadDirRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_NAME. */
+export declare function formatSftpName(response: SFTPName): Uint8Array;
+/** Parses SSH_FXP_NAME. */
+export declare function parseSftpName(input: Uint8Array): (SFTPName & {
     consumed: number;
 }) | undefined;
 /** Formats SSH_FXP_ATTRS. */

@@ -6,10 +6,13 @@ const SSH_FXP_CLOSE = 4;
 const SSH_FXP_READ = 5;
 const SSH_FXP_WRITE = 6;
 const SSH_FXP_STAT = 17;
+const SSH_FXP_OPENDIR = 11;
+const SSH_FXP_READDIR = 12;
 const SSH_FXP_STATUS = 101;
 const SSH_FXP_HANDLE = 102;
 const SSH_FXP_DATA = 103;
 const SSH_FXP_ATTRS = 105;
+const SSH_FXP_NAME = 104;
 const SSH_FILEXFER_ATTR_SIZE = 0x0000_0001;
 const SSH_FILEXFER_ATTR_UIDGID = 0x0000_0002;
 const SSH_FILEXFER_ATTR_PERMISSIONS = 0x0000_0004;
@@ -229,6 +232,64 @@ export function parseSftpStatRequest(input) {
     const request = { id: reader.readUint32(), path: decodeUtf8(reader.readString(), "SFTP path") };
     reader.assertDone();
     return { ...request, consumed: packet.consumed };
+}
+/** Formats SSH_FXP_OPENDIR. */
+export function formatSftpOpenDirRequest(request) {
+    return formatSftpPacket(SSH_FXP_OPENDIR, new SSHWriter().writeUint32(request.id).writeString(encodeUtf8(request.path, "SFTP path")).toUint8Array());
+}
+/** Parses SSH_FXP_OPENDIR. */
+export function parseSftpOpenDirRequest(input) {
+    const packet = expectPacket(input, SSH_FXP_OPENDIR, "SSH_FXP_OPENDIR");
+    if (!packet)
+        return undefined;
+    const reader = new SSHReader(packet.payload);
+    const request = { id: reader.readUint32(), path: decodeUtf8(reader.readString(), "SFTP path") };
+    reader.assertDone();
+    return { ...request, consumed: packet.consumed };
+}
+/** Formats SSH_FXP_READDIR. */
+export function formatSftpReadDirRequest(request) {
+    return formatSftpPacket(SSH_FXP_READDIR, new SSHWriter().writeUint32(request.id).writeString(requireHandle(request.handle)).toUint8Array());
+}
+/** Parses SSH_FXP_READDIR. */
+export function parseSftpReadDirRequest(input) {
+    const packet = expectPacket(input, SSH_FXP_READDIR, "SSH_FXP_READDIR");
+    if (!packet)
+        return undefined;
+    const reader = new SSHReader(packet.payload);
+    const request = { id: reader.readUint32(), handle: requireHandle(reader.readString()) };
+    reader.assertDone();
+    return { ...request, consumed: packet.consumed };
+}
+/** Formats SSH_FXP_NAME. */
+export function formatSftpName(response) {
+    const writer = new SSHWriter().writeUint32(response.id).writeUint32(response.entries.length);
+    for (const entry of response.entries) {
+        writer
+            .writeString(encodeUtf8(entry.filename, "SFTP filename"))
+            .writeString(encodeUtf8(entry.longname, "SFTP longname"));
+        writeAttributes(writer, entry.attributes);
+    }
+    return formatSftpPacket(SSH_FXP_NAME, writer.toUint8Array());
+}
+/** Parses SSH_FXP_NAME. */
+export function parseSftpName(input) {
+    const packet = expectPacket(input, SSH_FXP_NAME, "SSH_FXP_NAME");
+    if (!packet)
+        return undefined;
+    const reader = new SSHReader(packet.payload);
+    const id = reader.readUint32();
+    const count = reader.readUint32();
+    const entries = [];
+    for (let index = 0; index < count; index++) {
+        entries.push({
+            filename: decodeUtf8(reader.readString(), "SFTP filename"),
+            longname: decodeUtf8(reader.readString(), "SFTP longname"),
+            attributes: readAttributes(reader),
+        });
+    }
+    reader.assertDone();
+    return { id, entries, consumed: packet.consumed };
 }
 /** Formats SSH_FXP_ATTRS. */
 export function formatSftpAttributes(id, attributes) {

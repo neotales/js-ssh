@@ -6,8 +6,11 @@ import {
   formatSftpData,
   formatSftpHandle,
   formatSftpInit,
+  formatSftpName,
+  formatSftpOpenDirRequest,
   formatSftpOpenRequest,
   formatSftpPacket,
+  formatSftpReadDirRequest,
   formatSftpReadRequest,
   formatSftpStatRequest,
   formatSftpStatus,
@@ -18,7 +21,10 @@ import {
   parseSftpData,
   parseSftpHandle,
   parseSftpInit,
+  parseSftpName,
+  parseSftpOpenDirRequest,
   parseSftpOpenRequest,
+  parseSftpReadDirRequest,
   parseSftpReadRequest,
   parseSftpStatRequest,
   parseSftpStatus,
@@ -107,4 +113,23 @@ test("SFTP stat and attributes support v3 metadata fields", () => {
   const attrsWire = formatSftpAttributes(5, attributes);
   deepStrictEqual(parseSftpAttributes(attrsWire), { id: 5, attributes, consumed: attrsWire.length });
   throws(() => formatSftpAttributes(1, { uid: 1 }), SFTPError);
+});
+
+test("SFTP directory messages preserve handles and entry attributes", () => {
+  const open = { id: 6, path: "/dir" };
+  const openWire = formatSftpOpenDirRequest(open);
+  deepStrictEqual(parseSftpOpenDirRequest(openWire), { ...open, consumed: openWire.length });
+  const read = { id: 7, handle: Uint8Array.of(1, 2) };
+  const readWire = formatSftpReadDirRequest(read);
+  deepStrictEqual(parseSftpReadDirRequest(readWire), { ...read, consumed: readWire.length });
+  const name = {
+    id: 7,
+    entries: [{
+      filename: "file.txt",
+      longname: "-rw-r--r-- file.txt",
+      attributes: { size: 4n, permissions: 0o100644 },
+    }],
+  };
+  const nameWire = formatSftpName(name);
+  deepStrictEqual(parseSftpName(nameWire), { ...name, consumed: nameWire.length });
 });
