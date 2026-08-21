@@ -1,4 +1,6 @@
 import { SSHReader, SSHWriter } from "./wire.js";
+import { SSHPublicKey } from "./public_key.js";
+import { SSHSignature } from "./signature.js";
 const SSH_MSG_SERVICE_REQUEST = 5;
 const SSH_MSG_SERVICE_ACCEPT = 6;
 const SSH_MSG_USERAUTH_REQUEST = 50;
@@ -54,6 +56,47 @@ export function formatUserAuthNoneRequest(request) {
         .writeString(service)
         .writeString(new TextEncoder().encode("none"))
         .toUint8Array();
+}
+/** Parses an SSH_MSG_USERAUTH_REQUEST whose method is `publickey`. */
+export function parseUserAuthPublicKeyRequest(payload) {
+    const reader = new SSHReader(payload);
+    if (reader.readByte() !== SSH_MSG_USERAUTH_REQUEST)
+        throw new SSHAuthError("expected SSH_MSG_USERAUTH_REQUEST");
+    const username = decodeUtf8(reader.readString(), "SSH username");
+    const service = decodeName(reader.readString(), "SSH userauth service");
+    const method = decodeName(reader.readString(), "SSH userauth method");
+    if (!username)
+        throw new SSHAuthError("SSH username must not be empty");
+    if (method !== "publickey")
+        throw new SSHAuthError(`expected the publickey userauth method, received ${method}`);
+    const hasSignature = reader.readBoolean();
+    const algorithm = decodeName(reader.readString(), "SSH public-key algorithm");
+    const key = new SSHPublicKey(reader.readString());
+    if (algorithm !== key.type)
+        throw new SSHAuthError("SSH public-key algorithm does not match the public-key blob");
+    const signature = hasSignature ? new SSHSignature(reader.readString()) : undefined;
+    if (signature && signature.format !== algorithm)
+        throw new SSHAuthError("SSH signature algorithm does not match the public-key algorithm");
+    reader.assertDone();
+    return { username, service, key, signature };
+}
+/** Formats an SSH_MSG_USERAUTH_REQUEST using the `publickey` method. */
+export function formatUserAuthPublicKeyRequest(request) {
+    if (!request.username)
+        throw new SSHAuthError("SSH username must not be empty");
+    if (request.signature && request.signature.format !== request.key.type)
+        throw new SSHAuthError("SSH signature algorithm does not match the public-key algorithm");
+    const writer = new SSHWriter()
+        .writeByte(SSH_MSG_USERAUTH_REQUEST)
+        .writeString(encodeUtf8(request.username, "SSH username"))
+        .writeString(encodeName(request.service, "SSH userauth service"))
+        .writeString(new TextEncoder().encode("publickey"))
+        .writeBoolean(request.signature !== undefined)
+        .writeString(encodeName(request.key.type, "SSH public-key algorithm"))
+        .writeString(request.key.marshal());
+    if (request.signature)
+        writer.writeString(request.signature.marshal());
+    return writer.toUint8Array();
 }
 /** Parses SSH_MSG_USERAUTH_FAILURE. */
 export function parseUserAuthFailure(payload) {

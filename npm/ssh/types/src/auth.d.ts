@@ -1,3 +1,5 @@
+import { SSHPublicKey } from "./public_key.js";
+import { SSHSignature } from "./signature.js";
 /** A parsed SSH_MSG_USERAUTH_REQUEST for the `none` method. */
 export type SSHUserAuthNoneRequest = {
     username: string;
@@ -7,6 +9,13 @@ export type SSHUserAuthNoneRequest = {
 export type SSHUserAuthFailure = {
     methods: string[];
     partialSuccess: boolean;
+};
+/** A parsed SSH_MSG_USERAUTH_REQUEST for the `publickey` method. */
+export type SSHUserAuthPublicKeyRequest = {
+    username: string;
+    service: string;
+    key: SSHPublicKey;
+    signature?: SSHSignature;
 };
 /** Error raised when an SSH authentication message is malformed. */
 export declare class SSHAuthError extends Error {
@@ -24,6 +33,10 @@ export declare function formatServiceAccept(service: string): Uint8Array;
 export declare function parseUserAuthNoneRequest(payload: Uint8Array): SSHUserAuthNoneRequest;
 /** Formats an SSH_MSG_USERAUTH_REQUEST using the `none` method. */
 export declare function formatUserAuthNoneRequest(request: SSHUserAuthNoneRequest): Uint8Array;
+/** Parses an SSH_MSG_USERAUTH_REQUEST whose method is `publickey`. */
+export declare function parseUserAuthPublicKeyRequest(payload: Uint8Array): SSHUserAuthPublicKeyRequest;
+/** Formats an SSH_MSG_USERAUTH_REQUEST using the `publickey` method. */
+export declare function formatUserAuthPublicKeyRequest(request: SSHUserAuthPublicKeyRequest): Uint8Array;
 /** Parses SSH_MSG_USERAUTH_FAILURE. */
 export declare function parseUserAuthFailure(payload: Uint8Array): SSHUserAuthFailure;
 /** Formats SSH_MSG_USERAUTH_FAILURE. */
