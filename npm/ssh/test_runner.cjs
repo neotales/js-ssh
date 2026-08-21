@@ -2,18 +2,19 @@
 const { styleText } = require("util");
 const process = require("process");
 const filePaths = [
-    "tests/auth.test.js",
-    "tests/cipher.test.js",
-    "tests/connection.test.js",
-    "tests/identification.test.js",
-    "tests/kex.test.js",
-    "tests/keys.test.js",
-    "tests/known_hosts.test.js",
-    "tests/packet.test.js",
-    "tests/primitives.test.js",
-    "tests/sftp.test.js",
-    "tests/signature.test.js",
-    "tests/transport.test.js",
+    "auth.test.js",
+    "cipher.test.js",
+    "connection.test.js",
+    "identification.test.js",
+    "kex.test.js",
+    "keys.test.js",
+    "known_hosts.test.js",
+    "packet.test.js",
+    "primitives.test.js",
+    "protocol/sftp.test.js",
+    "sftp.test.js",
+    "signature.test.js",
+    "transport.test.js",
 ];
 async function main() {
     const fileIndexArg = process.argv[2];

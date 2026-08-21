@@ -65,7 +65,7 @@ async function build(): Promise<void> {
     await dntBuild({
       entryPoints,
       outDir: outputDirectory,
-      rootTestDir: join(sourceDirectory, "tests"),
+      rootTestDir: sourceDirectory,
       configFile: import.meta.resolve("../deno.json"),
       frozenLockfile: true,
       packageManager: "pnpm",
@@ -163,7 +163,7 @@ async function test(runtimes: Set<string>): Promise<void> {
   const selected = runtimes.size ? runtimes : new Set(["deno", "node"]);
   if (selected.has("deno")) await run("deno", ["test", "-A"], sourceDirectory);
   if (selected.has("node") || selected.has("bun")) await build();
-  if (selected.has("bun")) await run("bun", ["test", "esm/tests"], packageDirectory);
+  if (selected.has("bun")) await run("bun", ["test", "esm"], packageDirectory);
 }
 
 async function clean(): Promise<void> {

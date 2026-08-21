@@ -26,36 +26,6 @@
         "default": "./esm/mod.js"
       }
     },
-    "./auth": {
-      "import": {
-        "types": "./types/auth.d.ts",
-        "default": "./esm/auth.js"
-      }
-    },
-    "./connection": {
-      "import": {
-        "types": "./types/connection.d.ts",
-        "default": "./esm/connection.js"
-      }
-    },
-    "./cipher": {
-      "import": {
-        "types": "./types/cipher.d.ts",
-        "default": "./esm/cipher.js"
-      }
-    },
-    "./identification": {
-      "import": {
-        "types": "./types/identification.d.ts",
-        "default": "./esm/identification.js"
-      }
-    },
-    "./kex": {
-      "import": {
-        "types": "./types/kex.d.ts",
-        "default": "./esm/kex.js"
-      }
-    },
     "./keys": {
       "import": {
         "types": "./types/keys.d.ts",
@@ -68,28 +38,10 @@
         "default": "./esm/known_hosts.js"
       }
     },
-    "./packet": {
-      "import": {
-        "types": "./types/packet.d.ts",
-        "default": "./esm/packet.js"
-      }
-    },
-    "./primitives": {
-      "import": {
-        "types": "./types/primitives.d.ts",
-        "default": "./esm/primitives.js"
-      }
-    },
     "./sftp": {
       "import": {
         "types": "./types/sftp.d.ts",
         "default": "./esm/sftp.js"
-      }
-    },
-    "./transport": {
-      "import": {
-        "types": "./types/transport.d.ts",
-        "default": "./esm/transport.js"
       }
     }
   },

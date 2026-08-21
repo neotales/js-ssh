@@ -5,16 +5,8 @@
   "license": "MIT",
   "exports": {
     ".": "./mod.ts",
-    "./auth": "./auth.ts",
-    "./connection": "./connection.ts",
-    "./cipher": "./cipher.ts",
-    "./identification": "./identification.ts",
-    "./kex": "./kex.ts",
     "./keys": "./keys.ts",
     "./known_hosts": "./known_hosts.ts",
-    "./packet": "./packet.ts",
-    "./primitives": "./primitives.ts",
-    "./sftp": "./sftp.ts",
-    "./transport": "./transport.ts"
+    "./sftp": "./sftp.ts"
   }
 }

@@ -1,17 +1,9 @@
 /**
- * SSH2 primitives, clients, servers, SFTP, and SCP.
+ * SSH2 client, server, and file-transfer APIs.
  *
  * @module @neotales/ssh
  */
 
-export * from "./primitives.ts";
 export * from "./keys.ts";
 export * from "./known_hosts.ts";
-export * from "./identification.ts";
-export * from "./kex.ts";
-export * from "./packet.ts";
-export * from "./auth.ts";
-export * from "./connection.ts";
-export * from "./transport.ts";
-export * from "./cipher.ts";
 export * from "./sftp.ts";
