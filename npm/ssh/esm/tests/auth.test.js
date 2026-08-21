@@ -1,6 +1,6 @@
 import { deepStrictEqual, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { formatServiceAccept, formatServiceRequest, formatUserAuthFailure, formatUserAuthNoneRequest, formatUserAuthPublicKeyRequest, formatUserAuthSuccess, parseServiceAccept, parseServiceRequest, parseUserAuthFailure, parseUserAuthNoneRequest, parseUserAuthPublicKeyRequest, parseUserAuthSuccess, SSHAuthError, } from "../auth.js";
+import { formatServiceAccept, formatServiceRequest, formatUserAuthFailure, formatUserAuthNoneRequest, formatUserAuthPublicKeyRequest, formatUserAuthPublicKeySignatureData, formatUserAuthSuccess, parseServiceAccept, parseServiceRequest, parseUserAuthFailure, parseUserAuthNoneRequest, parseUserAuthPublicKeyRequest, parseUserAuthSuccess, SSHAuthError, } from "../auth.js";
 import { parsePublicKey, parseSignature } from "../keys.js";
 import { SSHWriter } from "../primitives.js";
 test("SSH service negotiation preserves valid service names", () => {
@@ -35,4 +35,15 @@ test("publickey userauth supports both probes and signed requests", () => {
     deepStrictEqual(probe.key.marshal(), key.marshal());
     const signed = parseUserAuthPublicKeyRequest(formatUserAuthPublicKeyRequest({ username: "alicia", service: "ssh-connection", key, signature }));
     deepStrictEqual(signed.signature?.marshal(), signature.marshal());
+    const sessionId = Uint8Array.of(1, 2, 3);
+    deepStrictEqual(formatUserAuthPublicKeySignatureData(sessionId, { username: "alicia", service: "ssh-connection", key }), new SSHWriter()
+        .writeString(sessionId)
+        .writeByte(50)
+        .writeString(new TextEncoder().encode("alicia"))
+        .writeString(new TextEncoder().encode("ssh-connection"))
+        .writeString(new TextEncoder().encode("publickey"))
+        .writeBoolean(true)
+        .writeString(new TextEncoder().encode("ssh-ed25519"))
+        .writeString(key.marshal())
+        .toUint8Array());
 });

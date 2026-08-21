@@ -3,4 +3,4 @@
  *
  * @module @neotales/ssh/auth
  */
-export { formatServiceAccept, formatServiceRequest, formatUserAuthFailure, formatUserAuthNoneRequest, formatUserAuthPublicKeyRequest, formatUserAuthSuccess, parseServiceAccept, parseServiceRequest, parseUserAuthFailure, parseUserAuthNoneRequest, parseUserAuthPublicKeyRequest, parseUserAuthSuccess, SSHAuthError, type SSHUserAuthFailure, type SSHUserAuthNoneRequest, type SSHUserAuthPublicKeyRequest, } from "./src/auth.js";
+export { formatServiceAccept, formatServiceRequest, formatUserAuthFailure, formatUserAuthNoneRequest, formatUserAuthPublicKeyRequest, formatUserAuthPublicKeySignatureData, formatUserAuthSuccess, parseServiceAccept, parseServiceRequest, parseUserAuthFailure, parseUserAuthNoneRequest, parseUserAuthPublicKeyRequest, parseUserAuthSuccess, SSHAuthError, type SSHUserAuthFailure, type SSHUserAuthNoneRequest, type SSHUserAuthPublicKeyRequest, type SSHUserAuthPublicKeySignatureRequest, } from "./src/auth.js";

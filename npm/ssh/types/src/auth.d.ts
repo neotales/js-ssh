@@ -17,6 +17,12 @@ export type SSHUserAuthPublicKeyRequest = {
     key: SSHPublicKey;
     signature?: SSHSignature;
 };
+/** Public-key request fields included in the RFC 4252 signature transcript. */
+export type SSHUserAuthPublicKeySignatureRequest = {
+    username: string;
+    service: string;
+    key: SSHPublicKey;
+};
 /** Error raised when an SSH authentication message is malformed. */
 export declare class SSHAuthError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -37,6 +43,12 @@ export declare function formatUserAuthNoneRequest(request: SSHUserAuthNoneReques
 export declare function parseUserAuthPublicKeyRequest(payload: Uint8Array): SSHUserAuthPublicKeyRequest;
 /** Formats an SSH_MSG_USERAUTH_REQUEST using the `publickey` method. */
 export declare function formatUserAuthPublicKeyRequest(request: SSHUserAuthPublicKeyRequest): Uint8Array;
+/**
+ * Formats the RFC 4252 section 7 public-key authentication signature transcript.
+ *
+ * The result is not an SSH packet; it begins with the SSH session identifier as an SSH string.
+ */
+export declare function formatUserAuthPublicKeySignatureData(sessionId: Uint8Array, request: SSHUserAuthPublicKeySignatureRequest): Uint8Array;
 /** Parses SSH_MSG_USERAUTH_FAILURE. */
 export declare function parseUserAuthFailure(payload: Uint8Array): SSHUserAuthFailure;
 /** Formats SSH_MSG_USERAUTH_FAILURE. */

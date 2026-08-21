@@ -98,6 +98,27 @@ export function formatUserAuthPublicKeyRequest(request) {
         writer.writeString(request.signature.marshal());
     return writer.toUint8Array();
 }
+/**
+ * Formats the RFC 4252 section 7 public-key authentication signature transcript.
+ *
+ * The result is not an SSH packet; it begins with the SSH session identifier as an SSH string.
+ */
+export function formatUserAuthPublicKeySignatureData(sessionId, request) {
+    if (sessionId.length === 0)
+        throw new SSHAuthError("SSH session ID must not be empty");
+    if (!request.username)
+        throw new SSHAuthError("SSH username must not be empty");
+    return new SSHWriter()
+        .writeString(sessionId)
+        .writeByte(SSH_MSG_USERAUTH_REQUEST)
+        .writeString(encodeUtf8(request.username, "SSH username"))
+        .writeString(encodeName(request.service, "SSH userauth service"))
+        .writeString(new TextEncoder().encode("publickey"))
+        .writeBoolean(true)
+        .writeString(encodeName(request.key.type, "SSH public-key algorithm"))
+        .writeString(request.key.marshal())
+        .toUint8Array();
+}
 /** Parses SSH_MSG_USERAUTH_FAILURE. */
 export function parseUserAuthFailure(payload) {
     const reader = new SSHReader(payload);

@@ -10,6 +10,7 @@ export {
   formatUserAuthFailure,
   formatUserAuthNoneRequest,
   formatUserAuthPublicKeyRequest,
+  formatUserAuthPublicKeySignatureData,
   formatUserAuthSuccess,
   parseServiceAccept,
   parseServiceRequest,
@@ -21,4 +22,5 @@ export {
   type SSHUserAuthFailure,
   type SSHUserAuthNoneRequest,
   type SSHUserAuthPublicKeyRequest,
+  type SSHUserAuthPublicKeySignatureRequest,
 } from "./src/auth.ts";

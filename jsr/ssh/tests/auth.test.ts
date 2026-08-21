@@ -6,6 +6,7 @@ import {
   formatUserAuthFailure,
   formatUserAuthNoneRequest,
   formatUserAuthPublicKeyRequest,
+  formatUserAuthPublicKeySignatureData,
   formatUserAuthSuccess,
   parseServiceAccept,
   parseServiceRequest,
@@ -62,4 +63,19 @@ test("publickey userauth supports both probes and signed requests", () => {
     formatUserAuthPublicKeyRequest({ username: "alicia", service: "ssh-connection", key, signature }),
   );
   deepStrictEqual(signed.signature?.marshal(), signature.marshal());
+
+  const sessionId = Uint8Array.of(1, 2, 3);
+  deepStrictEqual(
+    formatUserAuthPublicKeySignatureData(sessionId, { username: "alicia", service: "ssh-connection", key }),
+    new SSHWriter()
+      .writeString(sessionId)
+      .writeByte(50)
+      .writeString(new TextEncoder().encode("alicia"))
+      .writeString(new TextEncoder().encode("ssh-connection"))
+      .writeString(new TextEncoder().encode("publickey"))
+      .writeBoolean(true)
+      .writeString(new TextEncoder().encode("ssh-ed25519"))
+      .writeString(key.marshal())
+      .toUint8Array(),
+  );
 });
