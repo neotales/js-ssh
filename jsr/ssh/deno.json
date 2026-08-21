@@ -6,6 +6,7 @@
   "exports": {
     ".": "./mod.ts",
     "./auth": "./auth.ts",
+    "./connection": "./connection.ts",
     "./identification": "./identification.ts",
     "./kex": "./kex.ts",
     "./keys": "./keys.ts",

@@ -11,3 +11,4 @@ export * from "./identification.ts";
 export * from "./kex.ts";
 export * from "./packet.ts";
 export * from "./auth.ts";
+export * from "./connection.ts";

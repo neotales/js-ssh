@@ -32,6 +32,12 @@
         "default": "./esm/auth.js"
       }
     },
+    "./connection": {
+      "import": {
+        "types": "./types/connection.d.ts",
+        "default": "./esm/connection.js"
+      }
+    },
     "./identification": {
       "import": {
         "types": "./types/identification.d.ts",
