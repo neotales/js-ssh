@@ -73,6 +73,12 @@
         "types": "./types/primitives.d.ts",
         "default": "./esm/primitives.js"
       }
+    },
+    "./transport": {
+      "import": {
+        "types": "./types/transport.d.ts",
+        "default": "./esm/transport.js"
+      }
     }
   },
   "scripts": {

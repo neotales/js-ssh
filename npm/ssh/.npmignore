@@ -17,6 +17,8 @@
 /types/tests/primitives.test.d.ts
 /esm/tests/signature.test.js
 /types/tests/signature.test.d.ts
+/esm/tests/transport.test.js
+/types/tests/transport.test.d.ts
 /test_runner.cjs
 yarn.lock
 pnpm-lock.yaml

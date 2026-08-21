@@ -11,6 +11,7 @@ const filePaths = [
     "tests/packet.test.js",
     "tests/primitives.test.js",
     "tests/signature.test.js",
+    "tests/transport.test.js",
 ];
 async function main() {
     const fileIndexArg = process.argv[2];

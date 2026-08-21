@@ -11,3 +11,4 @@ export * from "./kex.js";
 export * from "./packet.js";
 export * from "./auth.js";
 export * from "./connection.js";
+export * from "./transport.js";

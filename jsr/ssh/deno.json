@@ -12,6 +12,7 @@
     "./keys": "./keys.ts",
     "./known_hosts": "./known_hosts.ts",
     "./packet": "./packet.ts",
-    "./primitives": "./primitives.ts"
+    "./primitives": "./primitives.ts",
+    "./transport": "./transport.ts"
   }
 }
