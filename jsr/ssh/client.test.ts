@@ -251,7 +251,7 @@ test("managed client returns nonzero command status as result data", async () =>
   await client.close();
 });
 
-test("managed client terminates when command output exceeds its limit", async () => {
+test("command output limit closes only the affected channel", async () => {
   const clientKey = await generateEd25519KeyPair();
   const hostKey = await generateEd25519KeyPair();
   const peer = createPeer();
@@ -261,14 +261,16 @@ test("managed client terminates when command output exceeds its limit", async ()
       await wire.writePayload(formatChannelData({ recipientChannel: channel.local, data: new Uint8Array(8) }));
       await expectWindowAdjustments(wire, channel.remote, 1);
       await wire.writePayload(formatChannelData({ recipientChannel: channel.local, data: new Uint8Array(1) }));
+      strictEqual(parseChannelClose(await wire.readPayload()), channel.remote);
+      await wire.writePayload(formatChannelClose(channel.local));
     },
   });
   const client = await connectClient(peer.transport, clientKey);
   await rejects(() => client.run("large-output", { maximumOutputBytes: 8 }), SSHClientError);
   await server;
+  strictEqual(peer.transport.readable.locked, true);
+  await client.close();
   strictEqual(peer.transport.readable.locked, false);
-  strictEqual(peer.transport.writable.locked, false);
-  strictEqual(peer.closeCalls, 1);
 });
 
 test("managed client reports a missing remote exit status", async () => {
@@ -285,10 +287,11 @@ test("managed client reports a missing remote exit status", async () => {
   const client = await connectClient(peer.transport, clientKey);
   await rejects(() => client.run("no-status"), SSHRemoteExitError);
   await server;
+  await client.close();
   strictEqual(peer.closeCalls, 1);
 });
 
-test("managed client aborts an active command by closing its transport", async () => {
+test("cancelling an active command closes only its channel", async () => {
   const clientKey = await generateEd25519KeyPair();
   const hostKey = await generateEd25519KeyPair();
   const peer = createPeer();
@@ -298,9 +301,10 @@ test("managed client aborts an active command by closing its transport", async (
   });
   const server = serve(peer.server, hostKey, clientKey.publicKey, false, {
     onAuthenticated: async (wire) => {
-      await openExec(wire, "wait-forever");
+      const channel = await openExec(wire, "wait-forever");
       commandStarted();
-      await wire.readPayload();
+      strictEqual(parseChannelClose(await wire.readPayload()), channel.remote);
+      await wire.writePayload(formatChannelClose(channel.local));
     },
   });
   void server.catch(() => undefined);
@@ -310,35 +314,170 @@ test("managed client aborts an active command by closing its transport", async (
   await started;
   controller.abort(new Error("cancelled"));
   await rejects(() => running, SSHClientError);
+  strictEqual(peer.transport.readable.locked, true);
+  await server;
+  await client.close();
   strictEqual(peer.transport.readable.locked, false);
-  strictEqual(peer.transport.writable.locked, false);
-  strictEqual(peer.closeCalls, 1);
 });
 
-test("managed client rejects concurrent commands without sending another channel open", async () => {
+test("managed client multiplexes two commands with interleaved encrypted responses", async () => {
   const clientKey = await generateEd25519KeyPair();
   const hostKey = await generateEd25519KeyPair();
   const peer = createPeer();
-  let channelOpening!: () => void;
-  const opening = new Promise<void>((resolve) => {
-    channelOpening = resolve;
-  });
   const server = serve(peer.server, hostKey, clientKey.publicKey, false, {
     onAuthenticated: async (wire) => {
-      parseSessionChannelOpen(await wire.readPayload());
-      channelOpening();
-      await wire.readPayload();
+      const first = parseSessionChannelOpen(await wire.readPayload());
+      const second = parseSessionChannelOpen(await wire.readPayload());
+      await wire.writePayload(formatChannelOpenConfirmation({
+        recipientChannel: first.senderChannel,
+        senderChannel: 41,
+        initialWindowSize: 1_048_576,
+        maximumPacketSize: 32_768,
+      }));
+      await wire.writePayload(formatChannelOpenConfirmation({
+        recipientChannel: second.senderChannel,
+        senderChannel: 42,
+        initialWindowSize: 1_048_576,
+        maximumPacketSize: 32_768,
+      }));
+      const firstRequest = parseExecChannelRequest(await wire.readPayload());
+      const secondRequest = parseExecChannelRequest(await wire.readPayload());
+      const requests = new Map([[firstRequest.recipientChannel, firstRequest.command], [
+        secondRequest.recipientChannel,
+        secondRequest.command,
+      ]]);
+      strictEqual(requests.get(41), "first");
+      strictEqual(requests.get(42), "second");
+      await wire.writePayload(formatChannelRequestSuccess(second.senderChannel));
+      await wire.writePayload(formatChannelRequestSuccess(first.senderChannel));
+      const eofs = new Set([parseChannelEof(await wire.readPayload()), parseChannelEof(await wire.readPayload())]);
+      deepStrictEqual(eofs, new Set([41, 42]));
+      await writeFragmentedPayloads(
+        wire,
+        formatExitStatus({ recipientChannel: second.senderChannel, status: 2 }),
+        formatChannelEof(second.senderChannel),
+        formatChannelClose(second.senderChannel),
+        formatExitStatus({ recipientChannel: first.senderChannel, status: 1 }),
+        formatChannelEof(first.senderChannel),
+        formatChannelClose(first.senderChannel),
+      );
+      const closes = new Set<number>();
+      while (closes.size < 2) {
+        const payload = await wire.readPayload();
+        if (payload[0] === 96)
+          continue;
+        closes.add(parseChannelClose(payload));
+      }
+      deepStrictEqual(closes, new Set([41, 42]));
     },
   });
-  void server.catch(() => undefined);
   const client = await connectClient(peer.transport, clientKey);
-  const first = client.run("first");
-  await opening;
-  await rejects(() => client.run("second"), SSHClientError);
+  const [first, second] = await Promise.all([client.run("first"), client.run("second")]);
+  deepStrictEqual(first.stdout, new Uint8Array());
+  strictEqual(first.exitCode, 1);
+  deepStrictEqual(second.stdout, new Uint8Array());
+  strictEqual(second.exitCode, 2);
+  await server;
   await client.close();
-  await rejects(() => first, SSHClientError);
-  strictEqual(peer.transport.readable.locked, false);
-  strictEqual(peer.transport.writable.locked, false);
+});
+
+test("cancelling one multiplexed command does not close another", async () => {
+  const clientKey = await generateEd25519KeyPair();
+  const hostKey = await generateEd25519KeyPair();
+  const peer = createPeer();
+  let commandsStarted!: () => void;
+  const started = new Promise<void>((resolve) => commandsStarted = resolve);
+  const server = serve(peer.server, hostKey, clientKey.publicKey, false, {
+    onAuthenticated: async (wire) => {
+      const first = parseSessionChannelOpen(await wire.readPayload());
+      const second = parseSessionChannelOpen(await wire.readPayload());
+      await wire.writePayload(formatChannelOpenConfirmation({
+        recipientChannel: first.senderChannel,
+        senderChannel: 61,
+        initialWindowSize: 1_048_576,
+        maximumPacketSize: 32_768,
+      }));
+      await wire.writePayload(formatChannelOpenConfirmation({
+        recipientChannel: second.senderChannel,
+        senderChannel: 62,
+        initialWindowSize: 1_048_576,
+        maximumPacketSize: 32_768,
+      }));
+      parseExecChannelRequest(await wire.readPayload());
+      parseExecChannelRequest(await wire.readPayload());
+      await wire.writePayload(formatChannelRequestSuccess(first.senderChannel));
+      await wire.writePayload(formatChannelRequestSuccess(second.senderChannel));
+      parseChannelEof(await wire.readPayload());
+      parseChannelEof(await wire.readPayload());
+      commandsStarted();
+      strictEqual(parseChannelClose(await wire.readPayload()), 61);
+      await wire.writePayload(formatChannelClose(first.senderChannel));
+      await writeFragmentedPayloads(
+        wire,
+        formatChannelData({ recipientChannel: second.senderChannel, data: new TextEncoder().encode("still-running") }),
+        formatExitStatus({ recipientChannel: second.senderChannel, status: 0 }),
+        formatChannelEof(second.senderChannel),
+        formatChannelClose(second.senderChannel),
+      );
+      while (true) {
+        const payload = await wire.readPayload();
+        if (payload[0] === 93)
+          continue;
+        strictEqual(parseChannelClose(payload), 62);
+        break;
+      }
+    },
+  });
+  const client = await connectClient(peer.transport, clientKey);
+  const controller = new AbortController();
+  const cancelled = client.run("cancel-me", { signal: controller.signal });
+  const completed = client.run("complete-me");
+  await started;
+  controller.abort(new Error("cancelled"));
+  await rejects(() => cancelled, SSHClientError);
+  const result = await completed;
+  deepStrictEqual(result.stdout, new TextEncoder().encode("still-running"));
+  await server;
+  strictEqual(peer.transport.readable.locked, true);
+  await client.close();
+});
+
+test("managed client rejects unknown channel and unsolicited global replies as connection-fatal", async () => {
+  for (const payload of [formatChannelData({ recipientChannel: 99, data: Uint8Array.of(1) }), Uint8Array.of(81)]) {
+    const clientKey = await generateEd25519KeyPair();
+    const hostKey = await generateEd25519KeyPair();
+    const peer = createPeer();
+    const server = serve(peer.server, hostKey, clientKey.publicKey, false, {
+      onAuthenticated: (wire) => wire.writePayload(payload),
+    });
+    const client = await connectClient(peer.transport, clientKey);
+    await rejects(() => client.run("never-runs"), SSHClientError);
+    await server;
+    await client.close();
+    strictEqual(peer.transport.readable.locked, false);
+  }
+});
+
+test("managed client bounds opening and closing channels to 64", async () => {
+  const clientKey = await generateEd25519KeyPair();
+  const hostKey = await generateEd25519KeyPair();
+  const peer = createPeer();
+  let openingsRead!: () => void;
+  const openings = new Promise<void>((resolve) => openingsRead = resolve);
+  const server = serve(peer.server, hostKey, clientKey.publicKey, false, {
+    onAuthenticated: async (wire) => {
+      for (let index = 0; index < 64; index++)
+        parseSessionChannelOpen(await wire.readPayload());
+      openingsRead();
+    },
+  });
+  const client = await connectClient(peer.transport, clientKey);
+  const pending = Array.from({ length: 64 }, (_, index) => client.run(`wait-${index}`));
+  await openings;
+  await rejects(() => client.run("over-limit"), SSHClientError);
+  await client.close();
+  await Promise.all(pending.map((command) => rejects(() => command, SSHClientError)));
+  await server;
 });
 
 test("managed client opens an encrypted SFTP subsystem with fragmented channel data", async () => {
@@ -407,26 +546,64 @@ test("closing managed SFTP releases its lease for a later command", async () => 
   await client.close();
 });
 
-test("managed client rejects openSftp while a command owns the SSH reader", async () => {
+test("managed client runs a command while an SFTP subsystem is active", async () => {
   const clientKey = await generateEd25519KeyPair();
   const hostKey = await generateEd25519KeyPair();
   const peer = createPeer();
-  let channelOpening!: () => void;
-  const opening = new Promise<void>((resolve) => channelOpening = resolve);
   const server = serve(peer.server, hostKey, clientKey.publicKey, false, {
     onAuthenticated: async (wire) => {
-      parseSessionChannelOpen(await wire.readPayload());
-      channelOpening();
-      await wire.readPayload();
+      const command = parseSessionChannelOpen(await wire.readPayload());
+      const sftp = parseSessionChannelOpen(await wire.readPayload());
+      await wire.writePayload(formatChannelOpenConfirmation({
+        recipientChannel: command.senderChannel,
+        senderChannel: 51,
+        initialWindowSize: 1_048_576,
+        maximumPacketSize: 32_768,
+      }));
+      await wire.writePayload(formatChannelOpenConfirmation({
+        recipientChannel: sftp.senderChannel,
+        senderChannel: 52,
+        initialWindowSize: 65_536,
+        maximumPacketSize: 32_768,
+      }));
+      const commandRequest = parseExecChannelRequest(await wire.readPayload());
+      const sftpRequest = parseSubsystemChannelRequest(await wire.readPayload());
+      strictEqual(commandRequest.recipientChannel, 51);
+      strictEqual(sftpRequest.recipientChannel, 52);
+      await wire.writePayload(formatChannelRequestSuccess(command.senderChannel));
+      await wire.writePayload(formatChannelRequestSuccess(sftp.senderChannel));
+      strictEqual(parseChannelEof(await wire.readPayload()), 51);
+      requireSftpPacket(parseSftpInit(await readSftpChannelPacket(wire, 52)));
+      await writeFragmentedPayloads(
+        wire,
+        formatChannelData({
+          recipientChannel: sftp.senderChannel,
+          data: formatSftpVersion({ version: 3, extensions: [] }),
+        }),
+      );
+      await writeFragmentedPayloads(
+        wire,
+        formatExitStatus({ recipientChannel: command.senderChannel, status: 0 }),
+        formatChannelEof(command.senderChannel),
+        formatChannelClose(command.senderChannel),
+      );
+      while (true) {
+        const payload = await wire.readPayload();
+        if (payload[0] === 93)
+          continue;
+        strictEqual(parseChannelClose(payload), 51);
+        break;
+      }
+      await closeSftpChannel(wire, { local: sftp.senderChannel, remote: 52 });
     },
   });
-  void server.catch(() => undefined);
   const client = await connectClient(peer.transport, clientKey);
   const running = client.run("first");
-  await opening;
-  await rejects(() => client.openSftp(), SSHClientError);
+  const sftp = client.openSftp();
+  strictEqual((await running).exitCode, 0);
+  await (await sftp).close();
+  await server;
   await client.close();
-  await rejects(() => running, SSHClientError);
 });
 
 test("an unexpected SFTP channel close terminates the parent client", async () => {
@@ -436,11 +613,13 @@ test("an unexpected SFTP channel close terminates the parent client", async () =
   const server = serve(peer.server, hostKey, clientKey.publicKey, false, {
     onAuthenticated: async (wire) => {
       const channel = await openSftp(wire);
+      requireSftpPacket(parseSftpInit(await readSftpChannelPacket(wire, channel.remote)));
       await wire.writePayload(formatChannelClose(channel.local));
     },
   });
   const client = await connectClient(peer.transport, clientKey);
-  await rejects(() => client.openSftp(), SSHClientError);
+  const opening = client.openSftp();
+  await rejects(() => opening, SSHClientError);
   await server;
   strictEqual(peer.transport.readable.locked, false);
   strictEqual(peer.transport.writable.locked, false);

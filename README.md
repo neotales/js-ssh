@@ -27,12 +27,10 @@ await client.close();
 ```
 
 `run()` collects combined stdout and stderr in memory, bounded to 1 MiB by default or
-`maximumOutputBytes`. It currently permits exactly one active command and rejects concurrent calls;
-general SSH channel multiplexing is not available yet. `client.openSftp()` opens a managed SFTP v3
-subsystem and returns `SFTPClient`; it is also exclusive with `run()`, and closing that SFTP client releases
-the lease so a later command can run. Aborting an active command or SFTP open, or a channel protocol failure,
-closes the owned transport because this single-reader client cannot safely recover from a desynchronized
-channel. `connectTcp()` is available only in Deno, Node, Bun, and other runtimes that expose raw TCP;
+`maximumOutputBytes`. Commands and managed SFTP v3 subsystems can run concurrently through a private,
+bounded multiplexer with up to 64 opening, active, or closing channels. Closing or aborting one child closes
+only that channel; closing the parent terminates every child. Rekeying remains unsupported and a post-auth
+`KEXINIT` terminates the connection. `connectTcp()` is available only in Deno, Node, Bun, and other runtimes that expose raw TCP;
 browsers do not provide that capability. Applications can instead supply their own transport and must provide
 a rejecting-by-default host-verification policy. There is no server API in this core yet. `close()` currently
 terminates the owned transport immediately rather than performing graceful SSH shutdown.

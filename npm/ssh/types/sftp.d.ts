@@ -64,6 +64,10 @@ export declare class SFTPClient {
     static connect(channel: SFTPChannel, options?: SFTPConnectOptions): Promise<SFTPClient>;
     /** Closes the subsystem channel and rejects outstanding requests. */
     close(reason?: unknown): Promise<void>;
+    /** Immediately starts best-effort subsystem termination without waiting for cleanup. */
+    dispose(reason?: unknown): void;
+    /** Immediately starts best-effort subsystem termination without waiting for cleanup. */
+    [Symbol.dispose](): void;
     [Symbol.asyncDispose](): Promise<void>;
     /** Gets v3 attributes for a path. */
     stat(path: string, options?: SFTPOperationOptions): Promise<SFTPAttributes>;

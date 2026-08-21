@@ -1,4 +1,7 @@
 import { SSHReader, SSHWriter } from "./primitives.js";
+const SSH_MSG_GLOBAL_REQUEST = 80;
+const SSH_MSG_REQUEST_SUCCESS = 81;
+const SSH_MSG_REQUEST_FAILURE = 82;
 const SSH_MSG_CHANNEL_OPEN = 90;
 const SSH_MSG_CHANNEL_OPEN_CONFIRMATION = 91;
 const SSH_MSG_CHANNEL_OPEN_FAILURE = 92;
@@ -16,6 +19,37 @@ export class SSHConnectionError extends Error {
         super(message, options);
         this.name = "SSHConnectionError";
     }
+}
+/** Formats SSH_MSG_GLOBAL_REQUEST. */
+export function formatGlobalRequest(request) {
+    const header = new SSHWriter()
+        .writeByte(SSH_MSG_GLOBAL_REQUEST)
+        .writeString(encodeName(request.requestType, "SSH global request type"))
+        .writeBoolean(request.wantReply)
+        .toUint8Array();
+    return appendOpaqueData(header, request.data);
+}
+/** Parses SSH_MSG_GLOBAL_REQUEST. */
+export function parseGlobalRequest(payload) {
+    const reader = new SSHReader(payload);
+    expectMessage(reader, SSH_MSG_GLOBAL_REQUEST, "SSH_MSG_GLOBAL_REQUEST");
+    const requestType = decodeName(reader.readString(), "SSH global request type");
+    const wantReply = reader.readBoolean();
+    return { requestType, wantReply, data: payload.slice(reader.offset) };
+}
+/** Formats SSH_MSG_REQUEST_SUCCESS. */
+export function formatGlobalRequestSuccess(data) {
+    return appendOpaqueData(Uint8Array.of(SSH_MSG_REQUEST_SUCCESS), data);
+}
+/** Parses SSH_MSG_REQUEST_SUCCESS. */
+export function parseGlobalRequestSuccess(payload) {
+    const reader = new SSHReader(payload);
+    expectMessage(reader, SSH_MSG_REQUEST_SUCCESS, "SSH_MSG_REQUEST_SUCCESS");
+    return payload.slice(reader.offset);
+}
+/** Formats SSH_MSG_REQUEST_FAILURE. */
+export function formatGlobalRequestFailure() {
+    return Uint8Array.of(SSH_MSG_REQUEST_FAILURE);
 }
 /** Formats SSH_MSG_CHANNEL_OPEN for a `session` channel. */
 export function formatSessionChannelOpen(open) {
@@ -161,6 +195,15 @@ export function formatChannelClose(recipientChannel) {
 export function parseChannelClose(payload) {
     return parseChannelIdMessage(payload, SSH_MSG_CHANNEL_CLOSE, "SSH_MSG_CHANNEL_CLOSE");
 }
+/** Parses SSH_MSG_CHANNEL_REQUEST. */
+export function parseChannelRequest(payload) {
+    const reader = new SSHReader(payload);
+    expectMessage(reader, SSH_MSG_CHANNEL_REQUEST, "SSH_MSG_CHANNEL_REQUEST");
+    const recipientChannel = reader.readUint32();
+    const requestType = decodeName(reader.readString(), "SSH channel request type");
+    const wantReply = reader.readBoolean();
+    return { recipientChannel, requestType, wantReply, data: payload.slice(reader.offset) };
+}
 /** Formats an SSH `exec` channel request. */
 export function formatExecChannelRequest(request) {
     return new SSHWriter()
@@ -269,6 +312,24 @@ function parseChannelIdMessage(payload, message, name) {
     const recipientChannel = reader.readUint32();
     reader.assertDone();
     return recipientChannel;
+}
+function appendOpaqueData(header, data) {
+    const payload = new Uint8Array(header.length + data.length);
+    payload.set(header);
+    payload.set(data, header.length);
+    return payload;
+}
+function encodeName(value, name) {
+    const bytes = new Uint8Array(value.length);
+    for (let index = 0; index < value.length; index++) {
+        const code = value.charCodeAt(index);
+        if (code < 0x21 || code > 0x7e || code === 0x2c)
+            throw new SSHConnectionError(`${name} must be printable US-ASCII without commas`);
+        bytes[index] = code;
+    }
+    if (bytes.length === 0)
+        throw new SSHConnectionError(`${name} must not be empty`);
+    return bytes;
 }
 function decodeName(bytes, name) {
     let value = "";

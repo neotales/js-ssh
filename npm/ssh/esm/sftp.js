@@ -100,6 +100,14 @@ export class SFTPClient {
     async close(reason = new Error("SFTP client closed")) {
         await this.#terminate(reason, true);
     }
+    /** Immediately starts best-effort subsystem termination without waiting for cleanup. */
+    dispose(reason = new Error("SFTP client disposed")) {
+        void this.#terminate(reason);
+    }
+    /** Immediately starts best-effort subsystem termination without waiting for cleanup. */
+    [Symbol.dispose]() {
+        this.dispose();
+    }
     async [Symbol.asyncDispose]() {
         await this.close();
     }

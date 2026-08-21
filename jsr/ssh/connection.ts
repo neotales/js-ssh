@@ -1,5 +1,8 @@
 import { SSHReader, SSHWriter } from "./primitives.ts";
 
+const SSH_MSG_GLOBAL_REQUEST = 80;
+const SSH_MSG_REQUEST_SUCCESS = 81;
+const SSH_MSG_REQUEST_FAILURE = 82;
 const SSH_MSG_CHANNEL_OPEN = 90;
 const SSH_MSG_CHANNEL_OPEN_CONFIRMATION = 91;
 const SSH_MSG_CHANNEL_OPEN_FAILURE = 92;
@@ -54,6 +57,21 @@ export type SSHChannelExtendedData = {
   data: Uint8Array;
 };
 
+/** SSH_MSG_GLOBAL_REQUEST content. */
+export type SSHGlobalRequest = {
+  requestType: string;
+  wantReply: boolean;
+  data: Uint8Array;
+};
+
+/** SSH_MSG_CHANNEL_REQUEST content. */
+export type SSHChannelRequest = {
+  recipientChannel: number;
+  requestType: string;
+  wantReply: boolean;
+  data: Uint8Array;
+};
+
 /** SSH `exit-status` channel-request parameters. */
 export type SSHExitStatus = {
   recipientChannel: number;
@@ -80,6 +98,42 @@ export class SSHConnectionError extends Error {
     super(message, options);
     this.name = "SSHConnectionError";
   }
+}
+
+/** Formats SSH_MSG_GLOBAL_REQUEST. */
+export function formatGlobalRequest(request: SSHGlobalRequest): Uint8Array {
+  const header = new SSHWriter()
+    .writeByte(SSH_MSG_GLOBAL_REQUEST)
+    .writeString(encodeName(request.requestType, "SSH global request type"))
+    .writeBoolean(request.wantReply)
+    .toUint8Array();
+  return appendOpaqueData(header, request.data);
+}
+
+/** Parses SSH_MSG_GLOBAL_REQUEST. */
+export function parseGlobalRequest(payload: Uint8Array): SSHGlobalRequest {
+  const reader = new SSHReader(payload);
+  expectMessage(reader, SSH_MSG_GLOBAL_REQUEST, "SSH_MSG_GLOBAL_REQUEST");
+  const requestType = decodeName(reader.readString(), "SSH global request type");
+  const wantReply = reader.readBoolean();
+  return { requestType, wantReply, data: payload.slice(reader.offset) };
+}
+
+/** Formats SSH_MSG_REQUEST_SUCCESS. */
+export function formatGlobalRequestSuccess(data: Uint8Array): Uint8Array {
+  return appendOpaqueData(Uint8Array.of(SSH_MSG_REQUEST_SUCCESS), data);
+}
+
+/** Parses SSH_MSG_REQUEST_SUCCESS. */
+export function parseGlobalRequestSuccess(payload: Uint8Array): Uint8Array {
+  const reader = new SSHReader(payload);
+  expectMessage(reader, SSH_MSG_REQUEST_SUCCESS, "SSH_MSG_REQUEST_SUCCESS");
+  return payload.slice(reader.offset);
+}
+
+/** Formats SSH_MSG_REQUEST_FAILURE. */
+export function formatGlobalRequestFailure(): Uint8Array {
+  return Uint8Array.of(SSH_MSG_REQUEST_FAILURE);
 }
 
 /** Formats SSH_MSG_CHANNEL_OPEN for a `session` channel. */
@@ -242,6 +296,16 @@ export function parseChannelClose(payload: Uint8Array): number {
   return parseChannelIdMessage(payload, SSH_MSG_CHANNEL_CLOSE, "SSH_MSG_CHANNEL_CLOSE");
 }
 
+/** Parses SSH_MSG_CHANNEL_REQUEST. */
+export function parseChannelRequest(payload: Uint8Array): SSHChannelRequest {
+  const reader = new SSHReader(payload);
+  expectMessage(reader, SSH_MSG_CHANNEL_REQUEST, "SSH_MSG_CHANNEL_REQUEST");
+  const recipientChannel = reader.readUint32();
+  const requestType = decodeName(reader.readString(), "SSH channel request type");
+  const wantReply = reader.readBoolean();
+  return { recipientChannel, requestType, wantReply, data: payload.slice(reader.offset) };
+}
+
 /** Formats an SSH `exec` channel request. */
 export function formatExecChannelRequest(request: SSHExecChannelRequest): Uint8Array {
   return new SSHWriter()
@@ -363,6 +427,26 @@ function parseChannelIdMessage(payload: Uint8Array, message: number, name: strin
   const recipientChannel = reader.readUint32();
   reader.assertDone();
   return recipientChannel;
+}
+
+function appendOpaqueData(header: Uint8Array, data: Uint8Array): Uint8Array {
+  const payload = new Uint8Array(header.length + data.length);
+  payload.set(header);
+  payload.set(data, header.length);
+  return payload;
+}
+
+function encodeName(value: string, name: string): Uint8Array {
+  const bytes = new Uint8Array(value.length);
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code < 0x21 || code > 0x7e || code === 0x2c)
+      throw new SSHConnectionError(`${name} must be printable US-ASCII without commas`);
+    bytes[index] = code;
+  }
+  if (bytes.length === 0)
+    throw new SSHConnectionError(`${name} must not be empty`);
+  return bytes;
 }
 
 function decodeName(bytes: Uint8Array, name: string): string {

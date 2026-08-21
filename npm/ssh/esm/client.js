@@ -4,7 +4,7 @@ import { formatIdentification, readIdentification } from "./identification.js";
 import { formatKexEcdhInit, formatKexInit, formatNewKeys, generateX25519KeyPair, isKexGuessCorrect, negotiateKexInit, parseKexEcdhReply, parseKexInit, parseNewKeys, verifyCurve25519Sha256Reply, } from "./kex.js";
 import { formatPacket, readPacket } from "./packet.js";
 import { SSHPublicKey } from "./public_key.js";
-import { formatChannelClose, formatChannelData, formatChannelEof, formatChannelWindowAdjust, formatExecChannelRequest, formatSessionChannelOpen, formatSubsystemChannelRequest, parseChannelClose, parseChannelData, parseChannelEof, parseChannelExtendedData, parseChannelOpenConfirmation, parseChannelOpenFailure, parseChannelRequestFailure, parseChannelRequestSuccess, parseChannelWindowAdjust, parseExitStatus, } from "./connection.js";
+import { formatChannelClose, formatChannelData, formatChannelEof, formatChannelWindowAdjust, formatExecChannelRequest, formatGlobalRequestFailure, formatSessionChannelOpen, formatSubsystemChannelRequest, parseChannelClose, parseChannelData, parseChannelEof, parseChannelExtendedData, parseChannelOpenConfirmation, parseChannelOpenFailure, parseChannelRequest, parseChannelRequestFailure, parseChannelRequestSuccess, parseChannelWindowAdjust, parseExitStatus, parseGlobalRequest, } from "./connection.js";
 import { SFTPClient } from "./sftp.js";
 const DEFAULT_MAXIMUM_PACKET_LENGTH = 35_000;
 const DEFAULT_SOFTWARE_VERSION = "neotales-js-ssh";
@@ -24,6 +24,7 @@ const DEFAULT_MAXIMUM_OUTPUT_BYTES = 1_048_576;
 const DEFAULT_CHANNEL_WINDOW_SIZE = 1_048_576;
 const DEFAULT_CHANNEL_MAXIMUM_PACKET_SIZE = 32_768;
 const DEFAULT_SFTP_CHANNEL_WINDOW_SIZE = 65_536;
+const MAXIMUM_MANAGED_CHANNELS = 64;
 /** Safe base error for managed-client failures. */
 export class SSHClientError extends Error {
     constructor(message, options) {
@@ -70,15 +71,14 @@ export class SSHRemoteExitError extends SSHClientError {
 /**
  * An experimental authenticated SSH client.
  *
- * A client owns its transport after connecting. It does not read idle post-authentication traffic.
- * Commands and managed SFTP subsystems exclusively consume the transport while active and are serialized.
+ * A client owns its transport after connecting. A private multiplexer continuously routes post-authentication
+ * traffic to up to 64 managed command and SFTP channels.
  */
 export class SshClient {
     connectionInfo;
-    #io;
-    #leased = false;
+    #mux;
     constructor(io, connectionInfo) {
-        this.#io = io;
+        this.#mux = new ChannelMux(io);
         this.connectionInfo = connectionInfo;
     }
     /** Creates an owning client after its handshake has completed. @internal */
@@ -87,11 +87,19 @@ export class SshClient {
     }
     /** Immediately terminates the owned transport and rejects any pending command. */
     close(reason) {
-        return this.#io.shutdown(reason);
+        return this.#mux.close(reason);
     }
     /** Immediately aborts the owned transport. */
     abort(reason) {
-        return this.#io.shutdown(reason);
+        return this.#mux.close(reason);
+    }
+    /** Immediately starts best-effort transport termination without waiting for cleanup. */
+    dispose(reason) {
+        void this.abort(reason);
+    }
+    /** Immediately starts best-effort transport termination without waiting for cleanup. */
+    [Symbol.dispose]() {
+        this.dispose();
     }
     /** Immediately terminates the owned transport. */
     [Symbol.asyncDispose]() {
@@ -100,103 +108,43 @@ export class SshClient {
     /**
      * Runs one bounded remote `exec` command on an owned `session` channel.
      *
-     * Only one command may be active; another call rejects immediately rather than queuing. The result
-     * resolves after remote EOF, close, and `exit-status`; a nonzero exit status is result data. Stdout
-     * and stderr share `maximumOutputBytes`, which defaults to 1 MiB. If `signal` is already aborted, or
-     * aborts before the initial channel-open write begins, no remote command side effect occurs. Once that
-     * write begins, aborting terminates the owned transport because SSH has no generic command cancellation.
-     * Any command error after that write, including a rejected request, protocol error, malformed shutdown,
-     * or output-limit failure, also terminates the transport. Calling `close()` while this method is pending
-     * rejects it and releases the owned stream locks.
+     * Commands may run concurrently, up to the managed-channel limit. The result resolves after remote EOF,
+     * close, and `exit-status`; a nonzero exit status is result data. Stdout and stderr share
+     * `maximumOutputBytes`, which defaults to 1 MiB. Cancelling after opening has started closes only this
+     * channel and rejects this command. Calling `close()` rejects every active child operation.
      */
     run(command, options) {
-        if (this.#leased)
-            return Promise.reject(new SSHClientError("an SSH channel is already active"));
-        if (this.#io.isShutdown)
+        if (this.#mux.isClosed)
             return Promise.reject(new SSHClientError("SSH client is closed"));
-        this.#leased = true;
-        return this.#run(command, options).finally(() => {
-            this.#leased = false;
-        });
+        return this.#run(command, options);
     }
     /**
      * Opens one managed SFTP v3 subsystem channel.
      *
-     * Commands and SFTP are serialized while this experimental client has a single SSH reader. Closing the
-     * returned client closes only this subsystem channel, after which `run()` may be used again. Aborting after
-     * channel opening starts, or an SFTP/SSH channel protocol failure, terminates the parent transport.
+     * Commands and SFTP subsystems may coexist, up to the managed-channel limit. Closing the returned SFTP
+     * client closes only its subsystem channel. Aborting after channel opening starts closes only this channel.
      */
     openSftp(options) {
-        if (this.#leased)
-            return Promise.reject(new SSHClientError("an SSH channel is already active"));
-        if (this.#io.isShutdown)
+        if (this.#mux.isClosed)
             return Promise.reject(new SSHClientError("SSH client is closed"));
-        this.#leased = true;
-        return this.#openSftp(options).catch((error) => {
-            this.#leased = false;
-            throw error;
-        });
+        return this.#openSftp(options);
     }
     async #openSftp(options) {
         const validated = validateOpenSftpOptions(options);
-        let started = false;
+        if (validated.signal)
+            throwIfAborted(validated.signal);
+        const channel = this.#mux.createSftp();
         let abortListener;
         try {
             if (validated.signal) {
-                abortListener = () => {
-                    if (started)
-                        void this.#io.shutdown(abortError(validated.signal));
-                };
+                abortListener = () => channel.cancel(abortError(validated.signal));
                 validated.signal.addEventListener("abort", abortListener, { once: true });
-                throwIfAborted(validated.signal);
             }
-            const localChannel = 0;
-            started = true;
-            await this.#io.writePayload(formatSessionChannelOpen({
-                senderChannel: localChannel,
-                initialWindowSize: DEFAULT_SFTP_CHANNEL_WINDOW_SIZE,
-                maximumPacketSize: DEFAULT_CHANNEL_MAXIMUM_PACKET_SIZE,
-            }));
-            const openReply = await this.#io.readPayload();
-            let remoteChannel;
-            let remoteWindow;
-            let remoteMaximumPacketSize;
-            switch (openReply[0]) {
-                case SSH_MSG_CHANNEL_OPEN_CONFIRMATION: {
-                    const confirmation = parseChannelOpenConfirmation(openReply);
-                    if (confirmation.recipientChannel !== localChannel)
-                        throw new SSHClientError("SSH channel confirmation addressed an unknown channel");
-                    remoteChannel = confirmation.senderChannel;
-                    remoteWindow = confirmation.initialWindowSize;
-                    remoteMaximumPacketSize = confirmation.maximumPacketSize;
-                    break;
-                }
-                case SSH_MSG_CHANNEL_OPEN_FAILURE: {
-                    const failure = parseChannelOpenFailure(openReply);
-                    if (failure.recipientChannel !== localChannel)
-                        throw new SSHClientError("SSH channel failure addressed an unknown channel");
-                    throw new SSHClientError("SSH server rejected the SFTP session channel");
-                }
-                default:
-                    throw new SSHClientError("received an unsupported SSH message while opening an SFTP channel");
-            }
-            await this.#io.writePayload(formatSubsystemChannelRequest({ recipientChannel: remoteChannel, wantReply: true, subsystem: "sftp" }));
-            const subsystemReply = await this.#io.readPayload();
-            if (subsystemReply[0] === SSH_MSG_CHANNEL_FAILURE) {
-                if (parseChannelRequestFailure(subsystemReply) !== localChannel)
-                    throw new SSHClientError("SSH subsystem failure addressed an unknown channel");
-                throw new SSHClientError("SSH server rejected the SFTP subsystem request");
-            }
-            if (subsystemReply[0] !== SSH_MSG_CHANNEL_SUCCESS)
-                throw new SSHClientError("received an unsupported SSH message while starting SFTP");
-            if (parseChannelRequestSuccess(subsystemReply) !== localChannel)
-                throw new SSHClientError("SSH subsystem confirmation addressed an unknown channel");
-            const channel = new ManagedSftpChannel(this.#io, localChannel, remoteChannel, remoteWindow, remoteMaximumPacketSize, () => this.#leased = false);
+            await channel.start();
             return await SFTPClient.connect(channel, validated);
         }
         catch (error) {
-            if (started)
-                await this.#io.shutdown(error);
+            await channel.close(error);
             if (validated.signal?.aborted)
                 throw abortError(validated.signal);
             throw asClientError(error);
@@ -208,118 +156,18 @@ export class SshClient {
     }
     async #run(command, options) {
         const { signal, maximumOutputBytes } = validateRunOptions(command, options);
-        let started = false;
+        if (signal)
+            throwIfAborted(signal);
+        const channel = this.#mux.createCommand(maximumOutputBytes);
         let abortListener;
         try {
             if (signal) {
-                abortListener = () => {
-                    if (started)
-                        void this.#io.shutdown(abortError(signal));
-                };
+                abortListener = () => channel.cancel(abortError(signal));
                 signal.addEventListener("abort", abortListener, { once: true });
-                throwIfAborted(signal);
             }
-            const initialWindowSize = Math.min(maximumOutputBytes, DEFAULT_CHANNEL_WINDOW_SIZE);
-            const localChannel = 0;
-            started = true;
-            await this.#io.writePayload(formatSessionChannelOpen({
-                senderChannel: localChannel,
-                initialWindowSize,
-                maximumPacketSize: DEFAULT_CHANNEL_MAXIMUM_PACKET_SIZE,
-            }));
-            const openReply = await this.#io.readPayload();
-            let remoteChannel;
-            switch (openReply[0]) {
-                case SSH_MSG_CHANNEL_OPEN_CONFIRMATION: {
-                    const confirmation = parseChannelOpenConfirmation(openReply);
-                    if (confirmation.recipientChannel !== localChannel)
-                        throw new SSHClientError("SSH channel confirmation addressed an unknown channel");
-                    remoteChannel = confirmation.senderChannel;
-                    break;
-                }
-                case SSH_MSG_CHANNEL_OPEN_FAILURE: {
-                    const failure = parseChannelOpenFailure(openReply);
-                    if (failure.recipientChannel !== localChannel)
-                        throw new SSHClientError("SSH channel failure addressed an unknown channel");
-                    throw new SSHClientError("SSH server rejected the session channel");
-                }
-                default:
-                    throw new SSHClientError("received an unsupported SSH message while opening a channel");
-            }
-            await this.#io.writePayload(formatExecChannelRequest({ recipientChannel: remoteChannel, wantReply: true, command }));
-            const execReply = await this.#io.readPayload();
-            if (execReply[0] === SSH_MSG_CHANNEL_FAILURE) {
-                if (parseChannelRequestFailure(execReply) !== localChannel)
-                    throw new SSHClientError("SSH command failure addressed an unknown channel");
-                throw new SSHClientError("SSH server rejected the command request");
-            }
-            if (execReply[0] !== SSH_MSG_CHANNEL_SUCCESS)
-                throw new SSHClientError("received an unsupported SSH message while starting a command");
-            if (parseChannelRequestSuccess(execReply) !== localChannel)
-                throw new SSHClientError("SSH command confirmation addressed an unknown channel");
-            await this.#io.writePayload(formatChannelEof(remoteChannel));
-            const stdout = [];
-            const stderr = [];
-            let outputLength = 0;
-            let receiveWindow = initialWindowSize;
-            let receivedEof = false;
-            let exitCode;
-            while (true) {
-                const payload = await this.#io.readPayload();
-                switch (payload[0]) {
-                    case SSH_MSG_CHANNEL_DATA: {
-                        if (receivedEof)
-                            throw new SSHRemoteExitError("SSH channel sent data after EOF");
-                        const data = parseChannelData(payload);
-                        if (data.recipientChannel !== localChannel)
-                            throw new SSHClientError("SSH channel data addressed an unknown channel");
-                        ({ outputLength, receiveWindow } = await this.#appendOutput(stdout, data.data, outputLength, receiveWindow, maximumOutputBytes, remoteChannel));
-                        break;
-                    }
-                    case SSH_MSG_CHANNEL_EXTENDED_DATA: {
-                        if (receivedEof)
-                            throw new SSHRemoteExitError("SSH channel sent data after EOF");
-                        const data = parseChannelExtendedData(payload);
-                        if (data.recipientChannel !== localChannel)
-                            throw new SSHClientError("SSH extended channel data addressed an unknown channel");
-                        if (data.dataTypeCode !== 1)
-                            throw new SSHClientError("SSH channel sent an unsupported extended-data type");
-                        ({ outputLength, receiveWindow } = await this.#appendOutput(stderr, data.data, outputLength, receiveWindow, maximumOutputBytes, remoteChannel));
-                        break;
-                    }
-                    case SSH_MSG_CHANNEL_EOF:
-                        if (parseChannelEof(payload) !== localChannel)
-                            throw new SSHClientError("SSH channel EOF addressed an unknown channel");
-                        if (receivedEof)
-                            throw new SSHRemoteExitError("SSH channel sent EOF more than once");
-                        receivedEof = true;
-                        break;
-                    case SSH_MSG_CHANNEL_REQUEST: {
-                        const status = parseExitStatus(payload);
-                        if (status.recipientChannel !== localChannel)
-                            throw new SSHClientError("SSH exit status addressed an unknown channel");
-                        if (exitCode !== undefined)
-                            throw new SSHRemoteExitError("SSH channel sent more than one exit status");
-                        exitCode = status.status;
-                        break;
-                    }
-                    case SSH_MSG_CHANNEL_CLOSE:
-                        if (parseChannelClose(payload) !== localChannel)
-                            throw new SSHClientError("SSH channel close addressed an unknown channel");
-                        await this.#io.writePayload(formatChannelClose(remoteChannel));
-                        if (!receivedEof)
-                            throw new SSHRemoteExitError("SSH channel closed before EOF");
-                        if (exitCode === undefined)
-                            throw new SSHRemoteExitError("SSH command ended without an exit status");
-                        return Object.freeze({ stdout: joinOutput(stdout), stderr: joinOutput(stderr), exitCode });
-                    default:
-                        throw new SSHClientError("received an unsupported SSH channel message");
-                }
-            }
+            return await channel.start(command);
         }
         catch (error) {
-            if (started)
-                await this.#io.shutdown(error);
             if (signal?.aborted)
                 throw abortError(signal);
             throw asClientError(error);
@@ -328,18 +176,6 @@ export class SshClient {
             if (signal && abortListener)
                 signal.removeEventListener("abort", abortListener);
         }
-    }
-    async #appendOutput(output, data, outputLength, receiveWindow, maximumOutputBytes, remoteChannel) {
-        if (data.length > receiveWindow)
-            throw new SSHClientError("SSH channel exceeded its receive window");
-        if (data.length > maximumOutputBytes - outputLength)
-            throw new SSHClientError("SSH command output exceeds the configured limit");
-        if (data.length === 0)
-            return { outputLength, receiveWindow };
-        receiveWindow -= data.length;
-        output.push(data.slice());
-        await this.#io.writePayload(formatChannelWindowAdjust({ recipientChannel: remoteChannel, bytesToAdd: data.length }));
-        return { outputLength: outputLength + data.length, receiveWindow: receiveWindow + data.length };
     }
 }
 /**
@@ -526,134 +362,512 @@ class ClientIo {
         return this.#shutdown;
     }
 }
-/** Private SFTP channel adapter: it is the sole post-authentication SSH packet reader while leased. */
-class ManagedSftpChannel {
+/** The only post-authentication packet reader and owner of managed channel IDs. */
+class ChannelMux {
+    #io;
+    #channels = new Map();
+    #nextLocalChannel = 0;
+    #terminal;
+    constructor(io) {
+        this.#io = io;
+        void this.#readLoop();
+    }
+    get isClosed() {
+        return this.#terminal !== undefined || this.#io.isShutdown;
+    }
+    createCommand(maximumOutputBytes) {
+        return this.#register(new ManagedCommandChannel(this, this.#allocate(), maximumOutputBytes));
+    }
+    createSftp() {
+        return this.#register(new ManagedSftpChannel(this, this.#allocate()));
+    }
+    close(reason) {
+        return this.#fatal(reason ?? new SSHClientError("SSH client is closed"));
+    }
+    async write(payload) {
+        if (this.#terminal)
+            throw new SSHClientError("SSH client is closed");
+        try {
+            await this.#io.writePayload(payload);
+        }
+        catch (error) {
+            await this.#fatal(error);
+            throw error;
+        }
+    }
+    release(channel) {
+        if (this.#channels.get(channel.localChannel) === channel)
+            this.#channels.delete(channel.localChannel);
+    }
+    #register(channel) {
+        this.#channels.set(channel.localChannel, channel);
+        return channel;
+    }
+    #allocate() {
+        if (this.#channels.size >= MAXIMUM_MANAGED_CHANNELS)
+            throw new SSHClientError(`SSH managed channel limit of ${MAXIMUM_MANAGED_CHANNELS} reached`);
+        if (this.#nextLocalChannel > 0xffff_ffff)
+            throw new SSHClientError("SSH local channel ID space is exhausted");
+        return this.#nextLocalChannel++;
+    }
+    async #readLoop() {
+        try {
+            while (true)
+                await this.#route(await this.#io.readPayload());
+        }
+        catch (error) {
+            await this.#fatal(error);
+        }
+    }
+    async #route(payload) {
+        switch (payload[0]) {
+            case 2: // SSH_MSG_IGNORE
+            case 4: // SSH_MSG_DEBUG
+                return;
+            case 80: {
+                const request = parseGlobalRequest(payload);
+                if (request.wantReply)
+                    await this.write(formatGlobalRequestFailure());
+                return;
+            }
+            case SSH_MSG_CHANNEL_OPEN_CONFIRMATION:
+                return await this.#channel(parseChannelOpenConfirmation(payload).recipientChannel).confirmation(payload);
+            case SSH_MSG_CHANNEL_OPEN_FAILURE:
+                return await this.#channel(parseChannelOpenFailure(payload).recipientChannel).openFailure(payload);
+            case SSH_MSG_CHANNEL_WINDOW_ADJUST:
+                return await this.#channel(parseChannelWindowAdjust(payload).recipientChannel).windowAdjust(payload);
+            case SSH_MSG_CHANNEL_DATA:
+                return await this.#channel(parseChannelData(payload).recipientChannel).data(payload);
+            case SSH_MSG_CHANNEL_EXTENDED_DATA:
+                return await this.#channel(parseChannelExtendedData(payload).recipientChannel).extendedData(payload);
+            case SSH_MSG_CHANNEL_EOF:
+                return await this.#channel(parseChannelEof(payload)).eof();
+            case SSH_MSG_CHANNEL_CLOSE:
+                return await this.#channel(parseChannelClose(payload)).closeReceived();
+            case SSH_MSG_CHANNEL_REQUEST:
+                return await this.#channel(parseChannelRequest(payload).recipientChannel).request(payload);
+            case SSH_MSG_CHANNEL_SUCCESS:
+                return this.#channel(parseChannelRequestSuccess(payload)).requestReply(true);
+            case SSH_MSG_CHANNEL_FAILURE:
+                return this.#channel(parseChannelRequestFailure(payload)).requestReply(false);
+            case 20:
+                throw new SSHClientError("SSH rekeying is unsupported");
+            case 81:
+            case 82:
+            case 90:
+                throw new SSHClientError("received an unsolicited or unsupported SSH connection message");
+            default:
+                throw new SSHClientError("received an unexpected post-authentication SSH message");
+        }
+    }
+    #channel(localChannel) {
+        const channel = this.#channels.get(localChannel);
+        if (!channel)
+            throw new SSHClientError("SSH message addressed an unknown channel");
+        return channel;
+    }
+    #fatal(reason) {
+        if (!this.#terminal) {
+            const error = asClientError(reason);
+            for (const channel of this.#channels.values())
+                channel.terminal(error);
+            this.#channels.clear();
+            this.#terminal = this.#io.shutdown(error);
+        }
+        return this.#terminal;
+    }
+}
+class ManagedChannel {
+    localChannel;
+    mux;
+    remoteChannel;
+    remoteWindow = 0;
+    remoteMaximumPacketSize = 0;
+    receivedEof = false;
+    closing = false;
+    #openedResolve;
+    #openedReject;
+    #opened = new Promise((resolve, reject) => {
+        this.#openedResolve = resolve;
+        this.#openedReject = reject;
+    });
+    #reply;
+    #sentEof = false;
+    #sentClose = false;
+    #receivedClose = false;
+    constructor(mux, localChannel) {
+        this.mux = mux;
+        this.localChannel = localChannel;
+    }
+    async open(initialWindowSize) {
+        await this.mux.write(formatSessionChannelOpen({
+            senderChannel: this.localChannel,
+            initialWindowSize,
+            maximumPacketSize: DEFAULT_CHANNEL_MAXIMUM_PACKET_SIZE,
+        }));
+        await this.#opened;
+    }
+    async sendRequest(payload) {
+        if (this.#reply)
+            throw new SSHClientError("SSH channel already has a request awaiting a reply");
+        const reply = new Promise((resolve, reject) => this.#reply = { resolve, reject });
+        await this.mux.write(payload);
+        await reply;
+    }
+    async sendEof() {
+        if (this.remoteChannel === undefined)
+            throw new SSHClientError("SSH channel has not opened");
+        if (!this.#sentEof) {
+            this.#sentEof = true;
+            await this.mux.write(formatChannelEof(this.remoteChannel));
+        }
+    }
+    async close(_reason) {
+        this.closing = true;
+        if (this.remoteChannel !== undefined)
+            await this.#sendClose();
+    }
+    async confirmation(payload) {
+        if (this.remoteChannel !== undefined || this.#receivedClose)
+            throw new SSHClientError("SSH channel opened more than once");
+        const confirmation = parseChannelOpenConfirmation(payload);
+        this.remoteChannel = confirmation.senderChannel;
+        this.remoteWindow = confirmation.initialWindowSize;
+        this.remoteMaximumPacketSize = confirmation.maximumPacketSize;
+        this.#openedResolve();
+        if (this.closing)
+            await this.#sendClose();
+    }
+    openFailure(payload) {
+        if (this.remoteChannel !== undefined)
+            throw new SSHClientError("SSH channel failed after opening");
+        parseChannelOpenFailure(payload);
+        const error = new SSHClientError("SSH server rejected the session channel");
+        this.#openedReject(error);
+        this.onTerminal(error);
+        this.mux.release(this);
+    }
+    requestReply(success) {
+        const reply = this.#reply;
+        if (!reply)
+            throw new SSHClientError("SSH channel sent an unsolicited request reply");
+        this.#reply = undefined;
+        if (success)
+            reply.resolve();
+        else
+            reply.reject(new SSHClientError("SSH server rejected a channel request"));
+    }
+    async eof() {
+        if (this.receivedEof || this.#receivedClose)
+            throw new SSHClientError("SSH channel sent EOF after closing");
+        this.receivedEof = true;
+        await this.onEof();
+    }
+    async closeReceived() {
+        if (this.#receivedClose)
+            throw new SSHClientError("SSH channel sent close more than once");
+        this.#receivedClose = true;
+        if (!this.#sentClose)
+            await this.#sendClose();
+        try {
+            await this.onClose();
+        }
+        catch (error) {
+            this.onTerminal(error);
+            throw error;
+        }
+        finally {
+            this.mux.release(this);
+        }
+    }
+    terminal(reason) {
+        this.#openedReject(reason);
+        this.#reply?.reject(reason);
+        this.#reply = undefined;
+        this.onTerminal(reason);
+    }
+    async #sendClose() {
+        if (this.remoteChannel === undefined || this.#sentClose)
+            return;
+        this.#sentClose = true;
+        await this.mux.write(formatChannelClose(this.remoteChannel));
+    }
+}
+class ManagedCommandChannel extends ManagedChannel {
+    #maximumOutputBytes;
+    #result;
+    #resolveResult;
+    #rejectResult;
+    #stdout = [];
+    #stderr = [];
+    #outputLength = 0;
+    #receiveWindow;
+    #exitCode;
+    #cancelled;
+    #settled = false;
+    constructor(mux, localChannel, maximumOutputBytes) {
+        super(mux, localChannel);
+        this.#maximumOutputBytes = maximumOutputBytes;
+        this.#receiveWindow = Math.min(maximumOutputBytes, DEFAULT_CHANNEL_WINDOW_SIZE);
+        this.#result = new Promise((resolve, reject) => {
+            this.#resolveResult = resolve;
+            this.#rejectResult = reject;
+        });
+    }
+    start(command) {
+        void this.#begin(command);
+        return this.#result;
+    }
+    cancel(reason) {
+        if (!this.#cancelled) {
+            this.#cancelled = reason;
+            this.#reject(reason);
+            void this.close(reason).catch(() => undefined);
+        }
+    }
+    async windowAdjust(_payload) {
+        throw new SSHClientError("SSH command channel received an unexpected window adjustment");
+    }
+    async data(payload) {
+        if (this.closing || this.receivedEof)
+            throw new SSHRemoteExitError("SSH channel sent data after EOF or close");
+        try {
+            await this.#append(this.#stdout, parseChannelData(payload).data);
+        }
+        catch (error) {
+            this.#reject(error);
+            await this.close(error);
+        }
+    }
+    async extendedData(payload) {
+        if (this.closing || this.receivedEof)
+            throw new SSHRemoteExitError("SSH channel sent data after EOF or close");
+        try {
+            const data = parseChannelExtendedData(payload);
+            if (data.dataTypeCode !== 1)
+                throw new SSHClientError("SSH channel sent an unsupported extended-data type");
+            await this.#append(this.#stderr, data.data);
+        }
+        catch (error) {
+            this.#reject(error);
+            await this.close(error);
+        }
+    }
+    async request(payload) {
+        const status = parseExitStatus(payload);
+        if (this.#exitCode !== undefined)
+            throw new SSHRemoteExitError("SSH channel sent more than one exit status");
+        this.#exitCode = status.status;
+    }
+    async onEof() {
+        return;
+    }
+    async onClose() {
+        if (this.#cancelled)
+            return;
+        if (!this.receivedEof)
+            throw new SSHRemoteExitError("SSH channel closed before EOF");
+        if (this.#exitCode === undefined)
+            throw new SSHRemoteExitError("SSH command ended without an exit status");
+        this.#resolve(Object.freeze({
+            stdout: joinOutput(this.#stdout),
+            stderr: joinOutput(this.#stderr),
+            exitCode: this.#exitCode,
+        }));
+    }
+    onTerminal(reason) {
+        this.#reject(reason);
+    }
+    async #begin(command) {
+        try {
+            await this.open(this.#receiveWindow);
+            if (this.#cancelled)
+                return;
+            await this.sendRequest(formatExecChannelRequest({
+                recipientChannel: this.remoteChannel,
+                wantReply: true,
+                command,
+            }));
+            if (this.#cancelled)
+                return;
+            await this.sendEof();
+        }
+        catch (error) {
+            if (!this.#cancelled) {
+                this.#reject(error);
+                await this.close(error);
+            }
+        }
+    }
+    async #append(output, data) {
+        if (this.closing || this.receivedEof)
+            throw new SSHRemoteExitError("SSH channel sent data after EOF or close");
+        if (data.length > this.#receiveWindow)
+            throw new SSHClientError("SSH channel exceeded its receive window");
+        if (data.length > this.#maximumOutputBytes - this.#outputLength)
+            throw new SSHClientError("SSH command output exceeds the configured limit");
+        this.#receiveWindow -= data.length;
+        if (data.length > 0)
+            output.push(data.slice());
+        if (data.length > 0 && this.remoteChannel !== undefined) {
+            await this.mux.write(formatChannelWindowAdjust({ recipientChannel: this.remoteChannel, bytesToAdd: data.length }));
+            this.#receiveWindow += data.length;
+        }
+        this.#outputLength += data.length;
+    }
+    #resolve(result) {
+        if (!this.#settled) {
+            this.#settled = true;
+            this.#resolveResult(result);
+        }
+    }
+    #reject(reason) {
+        if (!this.#settled) {
+            this.#settled = true;
+            this.#rejectResult(reason);
+        }
+    }
+}
+/** Private SFTP stream bridge fed by the channel multiplexer. */
+class ManagedSftpChannel extends ManagedChannel {
     readable;
     writable;
-    #io;
-    #localChannel;
-    #remoteChannel;
-    #remoteMaximumPacketSize;
-    #releaseLease;
+    #ready;
     #remoteClose;
+    #resolveReady;
+    #rejectReady;
     #resolveRemoteClose;
     #rejectRemoteClose;
     #controller;
     #receiveWindow = DEFAULT_SFTP_CHANNEL_WINDOW_SIZE;
-    #remoteWindow;
     #normalClosing = false;
-    #sentEof = false;
-    #sentClose = false;
     #closed = false;
-    #released = false;
-    #normalClose;
-    #terminal;
+    #cancelled;
     #windowWaiters = [];
-    constructor(io, localChannel, remoteChannel, remoteWindow, remoteMaximumPacketSize, releaseLease) {
-        this.#io = io;
-        this.#localChannel = localChannel;
-        this.#remoteChannel = remoteChannel;
-        this.#remoteWindow = remoteWindow;
-        this.#remoteMaximumPacketSize = remoteMaximumPacketSize;
-        this.#releaseLease = releaseLease;
+    constructor(mux, localChannel) {
+        super(mux, localChannel);
+        this.#ready = new Promise((resolve, reject) => {
+            this.#resolveReady = resolve;
+            this.#rejectReady = reject;
+        });
         this.#remoteClose = new Promise((resolve, reject) => {
             this.#resolveRemoteClose = resolve;
             this.#rejectRemoteClose = reject;
         });
-        // Normal close awaits this promise; this observer prevents abnormal peer closure from becoming unhandled.
         void this.#remoteClose.catch(() => undefined);
         this.readable = new ReadableStream({
             start: (controller) => this.#controller = controller,
             pull: () => this.#replenishReceiveWindow(),
             cancel: (reason) => this.close(reason),
-        }, {
-            highWaterMark: DEFAULT_SFTP_CHANNEL_WINDOW_SIZE,
-            size: (chunk) => chunk.length,
-        });
+        }, { highWaterMark: DEFAULT_SFTP_CHANNEL_WINDOW_SIZE, size: (chunk) => chunk.length });
         this.writable = new WritableStream({
             write: (chunk) => this.#write(chunk),
             close: () => this.close(),
             abort: (reason) => this.close(reason),
         });
-        void this.#pump();
     }
-    close(reason) {
-        if (this.#normalClose)
-            return this.#normalClose;
-        if (this.#terminal)
-            return this.#terminal;
-        if (reason !== undefined)
-            return this.#terminate(reason);
+    start() {
+        void this.#begin();
+        return this.#ready;
+    }
+    cancel(reason) {
+        if (!this.#cancelled) {
+            this.#cancelled = reason;
+            this.#rejectReady(reason);
+            void this.close(reason).catch(() => undefined);
+        }
+    }
+    async close(_reason) {
+        if (this.#closed)
+            return;
         this.#normalClosing = true;
-        this.#normalClose = (async () => {
-            try {
-                await this.#sendEof();
-                await this.#sendClose();
-                await this.#remoteClose;
-                this.#completeNormalClose();
-            }
-            catch (error) {
-                await this.#terminate(error);
-                throw error;
-            }
-        })();
-        return this.#normalClose;
-    }
-    async #pump() {
+        this.closing = true;
         try {
-            while (!this.#closed) {
-                const payload = await this.#io.readPayload();
-                switch (payload[0]) {
-                    case SSH_MSG_CHANNEL_WINDOW_ADJUST: {
-                        const adjust = parseChannelWindowAdjust(payload);
-                        if (adjust.recipientChannel !== this.#localChannel)
-                            throw new SSHClientError("SSH window adjustment addressed an unknown SFTP channel");
-                        if (adjust.bytesToAdd > 0xffff_ffff - this.#remoteWindow)
-                            throw new SSHClientError("SSH SFTP channel window exceeds its maximum");
-                        this.#remoteWindow += adjust.bytesToAdd;
-                        const waiters = this.#windowWaiters.splice(0);
-                        for (const waiter of waiters)
-                            waiter.resolve();
-                        break;
-                    }
-                    case SSH_MSG_CHANNEL_DATA: {
-                        if (this.#normalClosing)
-                            throw new SSHClientError("SSH SFTP channel sent data while closing");
-                        const data = parseChannelData(payload);
-                        if (data.recipientChannel !== this.#localChannel)
-                            throw new SSHClientError("SSH channel data addressed an unknown SFTP channel");
-                        if (data.data.length > this.#receiveWindow)
-                            throw new SSHClientError("SSH SFTP channel exceeded its receive window");
-                        const available = this.#controller.desiredSize;
-                        if (available === null || data.data.length > available)
-                            throw new SSHClientError("SSH SFTP channel exceeded its bounded receive queue");
-                        this.#receiveWindow -= data.data.length;
-                        if (data.data.length > 0)
-                            this.#controller.enqueue(data.data.slice());
-                        break;
-                    }
-                    case SSH_MSG_CHANNEL_EOF:
-                        if (parseChannelEof(payload) !== this.#localChannel)
-                            throw new SSHClientError("SSH channel EOF addressed an unknown SFTP channel");
-                        if (!this.#normalClosing)
-                            throw new SSHClientError("SSH SFTP channel ended unexpectedly");
-                        break;
-                    case SSH_MSG_CHANNEL_CLOSE:
-                        if (parseChannelClose(payload) !== this.#localChannel)
-                            throw new SSHClientError("SSH channel close addressed an unknown SFTP channel");
-                        if (!this.#normalClosing)
-                            throw new SSHClientError("SSH SFTP channel closed unexpectedly");
-                        await this.#sendClose();
-                        this.#completeNormalClose();
-                        this.#resolveRemoteClose();
-                        break;
-                    default:
-                        throw new SSHClientError("received an unsupported SSH message on an SFTP channel");
-                }
-            }
+            if (this.remoteChannel === undefined)
+                return await super.close();
+            await this.sendEof();
+            await super.close();
+            await this.#remoteClose;
         }
         catch (error) {
-            await this.#terminate(error);
+            this.onTerminal(error);
+            throw error;
+        }
+    }
+    async windowAdjust(payload) {
+        const adjust = parseChannelWindowAdjust(payload);
+        if (adjust.bytesToAdd > 0xffff_ffff - this.remoteWindow)
+            throw new SSHClientError("SSH SFTP channel window exceeds its maximum");
+        this.remoteWindow += adjust.bytesToAdd;
+        for (const waiter of this.#windowWaiters.splice(0))
+            waiter.resolve();
+    }
+    async data(payload) {
+        if (this.#normalClosing)
+            throw new SSHClientError("SSH SFTP channel sent data while closing");
+        const data = parseChannelData(payload).data;
+        if (data.length > this.#receiveWindow)
+            throw new SSHClientError("SSH SFTP channel exceeded its receive window");
+        const available = this.#controller.desiredSize;
+        if (available === null || data.length > available)
+            throw new SSHClientError("SSH SFTP channel exceeded its bounded receive queue");
+        this.#receiveWindow -= data.length;
+        if (data.length > 0)
+            this.#controller.enqueue(data.slice());
+    }
+    async extendedData(_payload) {
+        throw new SSHClientError("SSH SFTP channel received extended data");
+    }
+    async request(_payload) {
+        throw new SSHClientError("SSH SFTP channel received an unexpected request");
+    }
+    async onEof() {
+        if (!this.#normalClosing)
+            throw new SSHClientError("SSH SFTP channel ended unexpectedly");
+    }
+    async onClose() {
+        if (!this.#normalClosing)
+            throw new SSHClientError("SSH SFTP channel closed unexpectedly");
+        this.#closed = true;
+        try {
+            this.#controller.close();
+        }
+        catch {
+            // The SFTP reader may already have cancelled this stream.
+        }
+        this.#resolveRemoteClose();
+    }
+    onTerminal(reason) {
+        this.#closed = true;
+        this.#rejectReady(reason);
+        this.#rejectRemoteClose(reason);
+        for (const waiter of this.#windowWaiters.splice(0))
+            waiter.reject(reason);
+        try {
+            this.#controller.error(reason);
+        }
+        catch {
+            // The SFTP reader may already have closed this stream.
+        }
+    }
+    async #begin() {
+        try {
+            await this.open(DEFAULT_SFTP_CHANNEL_WINDOW_SIZE);
+            if (this.#cancelled)
+                return;
+            await this.sendRequest(formatSubsystemChannelRequest({
+                recipientChannel: this.remoteChannel,
+                wantReply: true,
+                subsystem: "sftp",
+            }));
+            if (!this.#cancelled)
+                this.#resolveReady();
+        }
+        catch (error) {
+            if (!this.#cancelled) {
+                this.#rejectReady(error);
+                await this.close(error);
+            }
         }
     }
     async #replenishReceiveWindow() {
@@ -664,82 +878,33 @@ class ManagedSftpChannel {
             return;
         const queued = DEFAULT_SFTP_CHANNEL_WINDOW_SIZE - Math.max(0, available);
         const bytesToAdd = DEFAULT_SFTP_CHANNEL_WINDOW_SIZE - this.#receiveWindow - queued;
-        if (bytesToAdd <= 0)
+        if (bytesToAdd <= 0 || this.remoteChannel === undefined)
             return;
         this.#receiveWindow += bytesToAdd;
-        try {
-            await this.#io.writePayload(formatChannelWindowAdjust({ recipientChannel: this.#remoteChannel, bytesToAdd }));
-        }
-        catch (error) {
-            await this.#terminate(error);
-            throw error;
-        }
+        await this.mux.write(formatChannelWindowAdjust({ recipientChannel: this.remoteChannel, bytesToAdd }));
     }
     async #write(chunk) {
         if (!(chunk instanceof Uint8Array))
             throw new SSHClientError("SFTP channel accepts only byte chunks");
         try {
             for (let offset = 0; offset < chunk.length;) {
-                while (this.#remoteWindow === 0) {
-                    if (this.#closed)
+                while (this.remoteWindow === 0) {
+                    if (this.#closed || this.closing)
                         throw new SSHClientError("SFTP channel is closed");
                     await new Promise((resolve, reject) => this.#windowWaiters.push({ resolve, reject }));
                 }
-                const length = Math.min(chunk.length - offset, this.#remoteWindow, this.#remoteMaximumPacketSize);
-                this.#remoteWindow -= length;
-                await this.#io.writePayload(formatChannelData({ recipientChannel: this.#remoteChannel, data: chunk.subarray(offset, offset + length) }));
+                const length = Math.min(chunk.length - offset, this.remoteWindow, this.remoteMaximumPacketSize);
+                this.remoteWindow -= length;
+                await this.mux.write(formatChannelData({
+                    recipientChannel: this.remoteChannel,
+                    data: chunk.subarray(offset, offset + length),
+                }));
                 offset += length;
             }
         }
         catch (error) {
-            await this.#terminate(error);
+            void this.close(error).catch(() => undefined);
             throw error;
-        }
-    }
-    async #sendEof() {
-        if (!this.#sentEof) {
-            this.#sentEof = true;
-            await this.#io.writePayload(formatChannelEof(this.#remoteChannel));
-        }
-    }
-    async #sendClose() {
-        if (!this.#sentClose) {
-            this.#sentClose = true;
-            await this.#io.writePayload(formatChannelClose(this.#remoteChannel));
-        }
-    }
-    #completeNormalClose() {
-        if (this.#closed)
-            return;
-        this.#closed = true;
-        try {
-            this.#controller.close();
-        }
-        catch {
-            // The SFTP reader may already have cancelled this stream.
-        }
-        this.#release();
-    }
-    #terminate(reason) {
-        if (!this.#terminal) {
-            this.#closed = true;
-            try {
-                this.#controller.error(reason);
-            }
-            catch {
-                // The SFTP reader may already have closed this stream.
-            }
-            this.#rejectRemoteClose(reason);
-            for (const waiter of this.#windowWaiters.splice(0))
-                waiter.reject(reason);
-            this.#terminal = this.#io.shutdown(reason).finally(() => this.#release());
-        }
-        return this.#terminal;
-    }
-    #release() {
-        if (!this.#released) {
-            this.#released = true;
-            this.#releaseLease();
         }
     }
 }

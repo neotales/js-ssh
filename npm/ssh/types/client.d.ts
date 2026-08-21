@@ -95,8 +95,8 @@ export declare class SSHRemoteExitError extends SSHClientError {
 /**
  * An experimental authenticated SSH client.
  *
- * A client owns its transport after connecting. It does not read idle post-authentication traffic.
- * Commands and managed SFTP subsystems exclusively consume the transport while active and are serialized.
+ * A client owns its transport after connecting. A private multiplexer continuously routes post-authentication
+ * traffic to up to 64 managed command and SFTP channels.
  */
 export declare class SshClient implements AsyncDisposable {
     #private;
@@ -108,27 +108,26 @@ export declare class SshClient implements AsyncDisposable {
     close(reason?: unknown): Promise<void>;
     /** Immediately aborts the owned transport. */
     abort(reason?: unknown): Promise<void>;
+    /** Immediately starts best-effort transport termination without waiting for cleanup. */
+    dispose(reason?: unknown): void;
+    /** Immediately starts best-effort transport termination without waiting for cleanup. */
+    [Symbol.dispose](): void;
     /** Immediately terminates the owned transport. */
     [Symbol.asyncDispose](): Promise<void>;
     /**
      * Runs one bounded remote `exec` command on an owned `session` channel.
      *
-     * Only one command may be active; another call rejects immediately rather than queuing. The result
-     * resolves after remote EOF, close, and `exit-status`; a nonzero exit status is result data. Stdout
-     * and stderr share `maximumOutputBytes`, which defaults to 1 MiB. If `signal` is already aborted, or
-     * aborts before the initial channel-open write begins, no remote command side effect occurs. Once that
-     * write begins, aborting terminates the owned transport because SSH has no generic command cancellation.
-     * Any command error after that write, including a rejected request, protocol error, malformed shutdown,
-     * or output-limit failure, also terminates the transport. Calling `close()` while this method is pending
-     * rejects it and releases the owned stream locks.
+     * Commands may run concurrently, up to the managed-channel limit. The result resolves after remote EOF,
+     * close, and `exit-status`; a nonzero exit status is result data. Stdout and stderr share
+     * `maximumOutputBytes`, which defaults to 1 MiB. Cancelling after opening has started closes only this
+     * channel and rejects this command. Calling `close()` rejects every active child operation.
      */
     run(command: string, options?: RunOptions): Promise<CommandResult>;
     /**
      * Opens one managed SFTP v3 subsystem channel.
      *
-     * Commands and SFTP are serialized while this experimental client has a single SSH reader. Closing the
-     * returned client closes only this subsystem channel, after which `run()` may be used again. Aborting after
-     * channel opening starts, or an SFTP/SSH channel protocol failure, terminates the parent transport.
+     * Commands and SFTP subsystems may coexist, up to the managed-channel limit. Closing the returned SFTP
+     * client closes only its subsystem channel. Aborting after channel opening starts closes only this channel.
      */
     openSftp(options?: OpenSftpOptions): Promise<SFTPClient>;
 }

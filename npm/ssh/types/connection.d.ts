@@ -34,6 +34,19 @@ export type SSHChannelExtendedData = {
     dataTypeCode: number;
     data: Uint8Array;
 };
+/** SSH_MSG_GLOBAL_REQUEST content. */
+export type SSHGlobalRequest = {
+    requestType: string;
+    wantReply: boolean;
+    data: Uint8Array;
+};
+/** SSH_MSG_CHANNEL_REQUEST content. */
+export type SSHChannelRequest = {
+    recipientChannel: number;
+    requestType: string;
+    wantReply: boolean;
+    data: Uint8Array;
+};
 /** SSH `exit-status` channel-request parameters. */
 export type SSHExitStatus = {
     recipientChannel: number;
@@ -55,6 +68,16 @@ export type SSHSubsystemChannelRequest = {
 export declare class SSHConnectionError extends Error {
     constructor(message: string, options?: ErrorOptions);
 }
+/** Formats SSH_MSG_GLOBAL_REQUEST. */
+export declare function formatGlobalRequest(request: SSHGlobalRequest): Uint8Array;
+/** Parses SSH_MSG_GLOBAL_REQUEST. */
+export declare function parseGlobalRequest(payload: Uint8Array): SSHGlobalRequest;
+/** Formats SSH_MSG_REQUEST_SUCCESS. */
+export declare function formatGlobalRequestSuccess(data: Uint8Array): Uint8Array;
+/** Parses SSH_MSG_REQUEST_SUCCESS. */
+export declare function parseGlobalRequestSuccess(payload: Uint8Array): Uint8Array;
+/** Formats SSH_MSG_REQUEST_FAILURE. */
+export declare function formatGlobalRequestFailure(): Uint8Array;
 /** Formats SSH_MSG_CHANNEL_OPEN for a `session` channel. */
 export declare function formatSessionChannelOpen(open: SSHSessionChannelOpen): Uint8Array;
 /** Parses SSH_MSG_CHANNEL_OPEN for a `session` channel. */
@@ -87,6 +110,8 @@ export declare function parseChannelEof(payload: Uint8Array): number;
 export declare function formatChannelClose(recipientChannel: number): Uint8Array;
 /** Parses SSH_MSG_CHANNEL_CLOSE. */
 export declare function parseChannelClose(payload: Uint8Array): number;
+/** Parses SSH_MSG_CHANNEL_REQUEST. */
+export declare function parseChannelRequest(payload: Uint8Array): SSHChannelRequest;
 /** Formats an SSH `exec` channel request. */
 export declare function formatExecChannelRequest(request: SSHExecChannelRequest): Uint8Array;
 /** Parses an SSH `exec` channel request. */
