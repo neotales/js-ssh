@@ -1,7 +1,8 @@
 import { deepStrictEqual, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { formatServiceAccept, formatServiceRequest, formatUserAuthFailure, formatUserAuthNoneRequest, formatUserAuthPublicKeyRequest, formatUserAuthPublicKeySignatureData, formatUserAuthSuccess, parseServiceAccept, parseServiceRequest, parseUserAuthFailure, parseUserAuthNoneRequest, parseUserAuthPublicKeyRequest, parseUserAuthSuccess, SSHAuthError, } from "../auth.js";
+import { formatServiceAccept, formatServiceRequest, formatSignedEd25519UserAuthRequest, formatUserAuthFailure, formatUserAuthNoneRequest, formatUserAuthPublicKeyRequest, formatUserAuthPublicKeySignatureData, formatUserAuthSuccess, parseServiceAccept, parseServiceRequest, parseUserAuthFailure, parseUserAuthNoneRequest, parseUserAuthPublicKeyRequest, parseUserAuthSuccess, SSHAuthError, } from "../auth.js";
 import { parsePublicKey, parseSignature } from "../keys.js";
+import { generateEd25519KeyPair, verifyEd25519Signature } from "../keys.js";
 import { SSHWriter } from "../primitives.js";
 test("SSH service negotiation preserves valid service names", () => {
     strictEqual(parseServiceRequest(formatServiceRequest("ssh-userauth")), "ssh-userauth");
@@ -46,4 +47,14 @@ test("publickey userauth supports both probes and signed requests", () => {
         .writeString(new TextEncoder().encode("ssh-ed25519"))
         .writeString(key.marshal())
         .toUint8Array());
+});
+test("signed Ed25519 userauth requests sign the RFC 4252 transcript", async () => {
+    const pair = await generateEd25519KeyPair();
+    const request = { username: "alicia", service: "ssh-connection", key: pair.publicKey, privateKey: pair.privateKey };
+    const sessionId = Uint8Array.from({ length: 32 }, (_, index) => index);
+    const payload = await formatSignedEd25519UserAuthRequest(sessionId, request);
+    const parsed = parseUserAuthPublicKeyRequest(payload);
+    if (!parsed.signature)
+        throw new Error("expected a signed public-key request");
+    strictEqual(await verifyEd25519Signature(parsed.key, parsed.signature, formatUserAuthPublicKeySignatureData(sessionId, request)), true);
 });

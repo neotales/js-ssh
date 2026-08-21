@@ -7,6 +7,7 @@
 export {
   formatServiceAccept,
   formatServiceRequest,
+  formatSignedEd25519UserAuthRequest,
   formatUserAuthFailure,
   formatUserAuthNoneRequest,
   formatUserAuthPublicKeyRequest,
@@ -19,6 +20,7 @@ export {
   parseUserAuthPublicKeyRequest,
   parseUserAuthSuccess,
   SSHAuthError,
+  type SSHEd25519UserAuthRequest,
   type SSHUserAuthFailure,
   type SSHUserAuthNoneRequest,
   type SSHUserAuthPublicKeyRequest,

@@ -1,6 +1,7 @@
 import { SSHReader, SSHWriter } from "./wire.js";
 import { SSHPublicKey } from "./public_key.js";
 import { SSHSignature } from "./signature.js";
+import { signEd25519 } from "./ed25519.js";
 const SSH_MSG_SERVICE_REQUEST = 5;
 const SSH_MSG_SERVICE_ACCEPT = 6;
 const SSH_MSG_USERAUTH_REQUEST = 50;
@@ -118,6 +119,12 @@ export function formatUserAuthPublicKeySignatureData(sessionId, request) {
         .writeString(encodeName(request.key.type, "SSH public-key algorithm"))
         .writeString(request.key.marshal())
         .toUint8Array();
+}
+/** Creates a signed ssh-ed25519 SSH_MSG_USERAUTH_REQUEST. */
+export async function formatSignedEd25519UserAuthRequest(sessionId, request) {
+    const signatureData = formatUserAuthPublicKeySignatureData(sessionId, request);
+    const signature = await signEd25519(request.privateKey, signatureData);
+    return formatUserAuthPublicKeyRequest({ ...request, signature });
 }
 /** Parses SSH_MSG_USERAUTH_FAILURE. */
 export function parseUserAuthFailure(payload) {

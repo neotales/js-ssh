@@ -23,6 +23,10 @@ export type SSHUserAuthPublicKeySignatureRequest = {
     service: string;
     key: SSHPublicKey;
 };
+/** Inputs needed to create a signed ssh-ed25519 userauth request. */
+export type SSHEd25519UserAuthRequest = SSHUserAuthPublicKeySignatureRequest & {
+    privateKey: CryptoKey;
+};
 /** Error raised when an SSH authentication message is malformed. */
 export declare class SSHAuthError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -49,6 +53,8 @@ export declare function formatUserAuthPublicKeyRequest(request: SSHUserAuthPubli
  * The result is not an SSH packet; it begins with the SSH session identifier as an SSH string.
  */
 export declare function formatUserAuthPublicKeySignatureData(sessionId: Uint8Array, request: SSHUserAuthPublicKeySignatureRequest): Uint8Array;
+/** Creates a signed ssh-ed25519 SSH_MSG_USERAUTH_REQUEST. */
+export declare function formatSignedEd25519UserAuthRequest(sessionId: Uint8Array, request: SSHEd25519UserAuthRequest): Promise<Uint8Array>;
 /** Parses SSH_MSG_USERAUTH_FAILURE. */
 export declare function parseUserAuthFailure(payload: Uint8Array): SSHUserAuthFailure;
 /** Formats SSH_MSG_USERAUTH_FAILURE. */

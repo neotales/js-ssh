@@ -1,6 +1,7 @@
 import { SSHReader, SSHWriter } from "./wire.ts";
 import { SSHPublicKey } from "./public_key.ts";
 import { SSHSignature } from "./signature.ts";
+import { signEd25519 } from "./ed25519.ts";
 
 const SSH_MSG_SERVICE_REQUEST = 5;
 const SSH_MSG_SERVICE_ACCEPT = 6;
@@ -33,6 +34,11 @@ export type SSHUserAuthPublicKeySignatureRequest = {
   username: string;
   service: string;
   key: SSHPublicKey;
+};
+
+/** Inputs needed to create a signed ssh-ed25519 userauth request. */
+export type SSHEd25519UserAuthRequest = SSHUserAuthPublicKeySignatureRequest & {
+  privateKey: CryptoKey;
 };
 
 /** Error raised when an SSH authentication message is malformed. */
@@ -159,6 +165,16 @@ export function formatUserAuthPublicKeySignatureData(
     .writeString(encodeName(request.key.type, "SSH public-key algorithm"))
     .writeString(request.key.marshal())
     .toUint8Array();
+}
+
+/** Creates a signed ssh-ed25519 SSH_MSG_USERAUTH_REQUEST. */
+export async function formatSignedEd25519UserAuthRequest(
+  sessionId: Uint8Array,
+  request: SSHEd25519UserAuthRequest,
+): Promise<Uint8Array> {
+  const signatureData = formatUserAuthPublicKeySignatureData(sessionId, request);
+  const signature = await signEd25519(request.privateKey, signatureData);
+  return formatUserAuthPublicKeyRequest({ ...request, signature });
 }
 
 /** Parses SSH_MSG_USERAUTH_FAILURE. */
