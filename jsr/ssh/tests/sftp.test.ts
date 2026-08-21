@@ -10,6 +10,7 @@ import {
   formatSftpReadRequest,
   formatSftpStatus,
   formatSftpVersion,
+  formatSftpWriteRequest,
   parseSftpCloseRequest,
   parseSftpData,
   parseSftpHandle,
@@ -18,6 +19,7 @@ import {
   parseSftpReadRequest,
   parseSftpStatus,
   parseSftpVersion,
+  parseSftpWriteRequest,
   readSftpPacket,
   SFTPError,
 } from "../sftp.ts";
@@ -64,6 +66,9 @@ test("SFTP open, close, and read requests roundtrip with responses", () => {
   const read = { id: 3, handle, offset: 123n, length: 4096 };
   const readWire = formatSftpReadRequest(read);
   deepStrictEqual(parseSftpReadRequest(readWire), { ...read, consumed: readWire.length });
+  const write = { id: 4, handle, offset: 123n, data: Uint8Array.of(4, 5, 6) };
+  const writeWire = formatSftpWriteRequest(write);
+  deepStrictEqual(parseSftpWriteRequest(writeWire), { ...write, consumed: writeWire.length });
   const handleWire = formatSftpHandle({ id: 1, handle });
   deepStrictEqual(parseSftpHandle(handleWire), { id: 1, handle, consumed: handleWire.length });
   const dataWire = formatSftpData({ id: 3, data: Uint8Array.of(1, 2) });

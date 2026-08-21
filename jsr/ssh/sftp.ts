@@ -14,6 +14,7 @@ export {
   formatSftpReadRequest,
   formatSftpStatus,
   formatSftpVersion,
+  formatSftpWriteRequest,
   parseSftpCloseRequest,
   parseSftpData,
   parseSftpHandle,
@@ -22,6 +23,7 @@ export {
   parseSftpReadRequest,
   parseSftpStatus,
   parseSftpVersion,
+  parseSftpWriteRequest,
   readSftpPacket,
   type SFTPCloseRequest,
   type SFTPData,
@@ -34,4 +36,5 @@ export {
   type SFTPReadRequest,
   type SFTPStatus,
   type SFTPVersion,
+  type SFTPWriteRequest,
 } from "./src/sftp.ts";

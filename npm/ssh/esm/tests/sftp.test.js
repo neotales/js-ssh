@@ -1,6 +1,6 @@
 import { deepStrictEqual, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { formatSftpCloseRequest, formatSftpData, formatSftpHandle, formatSftpInit, formatSftpOpenRequest, formatSftpPacket, formatSftpReadRequest, formatSftpStatus, formatSftpVersion, parseSftpCloseRequest, parseSftpData, parseSftpHandle, parseSftpInit, parseSftpOpenRequest, parseSftpReadRequest, parseSftpStatus, parseSftpVersion, readSftpPacket, SFTPError, } from "../sftp.js";
+import { formatSftpCloseRequest, formatSftpData, formatSftpHandle, formatSftpInit, formatSftpOpenRequest, formatSftpPacket, formatSftpReadRequest, formatSftpStatus, formatSftpVersion, formatSftpWriteRequest, parseSftpCloseRequest, parseSftpData, parseSftpHandle, parseSftpInit, parseSftpOpenRequest, parseSftpReadRequest, parseSftpStatus, parseSftpVersion, parseSftpWriteRequest, readSftpPacket, SFTPError, } from "../sftp.js";
 test("SFTP framing reads complete packets and preserves trailing data", () => {
     const first = formatSftpPacket(200, Uint8Array.of(1, 2));
     const second = formatSftpPacket(201, Uint8Array.of(3));
@@ -40,6 +40,9 @@ test("SFTP open, close, and read requests roundtrip with responses", () => {
     const read = { id: 3, handle, offset: 123n, length: 4096 };
     const readWire = formatSftpReadRequest(read);
     deepStrictEqual(parseSftpReadRequest(readWire), { ...read, consumed: readWire.length });
+    const write = { id: 4, handle, offset: 123n, data: Uint8Array.of(4, 5, 6) };
+    const writeWire = formatSftpWriteRequest(write);
+    deepStrictEqual(parseSftpWriteRequest(writeWire), { ...write, consumed: writeWire.length });
     const handleWire = formatSftpHandle({ id: 1, handle });
     deepStrictEqual(parseSftpHandle(handleWire), { id: 1, handle, consumed: handleWire.length });
     const dataWire = formatSftpData({ id: 3, data: Uint8Array.of(1, 2) });

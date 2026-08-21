@@ -37,6 +37,13 @@ export type SFTPReadRequest = {
     offset: bigint;
     length: number;
 };
+/** SSH_FXP_WRITE request. */
+export type SFTPWriteRequest = {
+    id: number;
+    handle: Uint8Array;
+    offset: bigint;
+    data: Uint8Array;
+};
 /** SSH_FXP_HANDLE response. */
 export type SFTPHandle = {
     id: number;
@@ -90,6 +97,12 @@ export declare function parseSftpCloseRequest(input: Uint8Array): (SFTPCloseRequ
 export declare function formatSftpReadRequest(request: SFTPReadRequest): Uint8Array;
 /** Parses SSH_FXP_READ. */
 export declare function parseSftpReadRequest(input: Uint8Array): (SFTPReadRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_WRITE. */
+export declare function formatSftpWriteRequest(request: SFTPWriteRequest): Uint8Array;
+/** Parses SSH_FXP_WRITE. */
+export declare function parseSftpWriteRequest(input: Uint8Array): (SFTPWriteRequest & {
     consumed: number;
 }) | undefined;
 /** Formats SSH_FXP_HANDLE. */

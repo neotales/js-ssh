@@ -4,6 +4,7 @@ const SSH_FXP_VERSION = 2;
 const SSH_FXP_OPEN = 3;
 const SSH_FXP_CLOSE = 4;
 const SSH_FXP_READ = 5;
+const SSH_FXP_WRITE = 6;
 const SSH_FXP_STATUS = 101;
 const SSH_FXP_HANDLE = 102;
 const SSH_FXP_DATA = 103;
@@ -128,6 +129,30 @@ export function parseSftpReadRequest(input) {
         handle: requireHandle(reader.readString()),
         offset: reader.readUint64(),
         length: reader.readUint32(),
+    };
+    reader.assertDone();
+    return { ...request, consumed: packet.consumed };
+}
+/** Formats SSH_FXP_WRITE. */
+export function formatSftpWriteRequest(request) {
+    return formatSftpPacket(SSH_FXP_WRITE, new SSHWriter()
+        .writeUint32(request.id)
+        .writeString(requireHandle(request.handle))
+        .writeUint64(request.offset)
+        .writeString(request.data)
+        .toUint8Array());
+}
+/** Parses SSH_FXP_WRITE. */
+export function parseSftpWriteRequest(input) {
+    const packet = expectPacket(input, SSH_FXP_WRITE, "SSH_FXP_WRITE");
+    if (!packet)
+        return undefined;
+    const reader = new SSHReader(packet.payload);
+    const request = {
+        id: reader.readUint32(),
+        handle: requireHandle(reader.readString()),
+        offset: reader.readUint64(),
+        data: reader.readString(),
     };
     reader.assertDone();
     return { ...request, consumed: packet.consumed };
