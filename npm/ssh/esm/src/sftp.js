@@ -5,6 +5,9 @@ const SSH_FXP_OPEN = 3;
 const SSH_FXP_CLOSE = 4;
 const SSH_FXP_READ = 5;
 const SSH_FXP_WRITE = 6;
+const SSH_FXP_FSTAT = 8;
+const SSH_FXP_SETSTAT = 9;
+const SSH_FXP_FSETSTAT = 10;
 const SSH_FXP_STAT = 17;
 const SSH_FXP_OPENDIR = 11;
 const SSH_FXP_READDIR = 12;
@@ -461,6 +464,54 @@ function readAttributes(reader) {
     }
     return attributes;
 }
+/** Formats SSH_FXP_FSTAT. */
+export function formatSftpFStatRequest(request) {
+    return formatHandleRequest(SSH_FXP_FSTAT, request);
+}
+/** Parses SSH_FXP_FSTAT. */
+export function parseSftpFStatRequest(input) {
+    return parseHandleRequest(input, SSH_FXP_FSTAT, "SSH_FXP_FSTAT");
+}
+/** Formats SSH_FXP_SETSTAT. */
+export function formatSftpSetStatRequest(request) {
+    const writer = new SSHWriter().writeUint32(request.id).writeString(encodeUtf8(request.path, "SFTP path"));
+    writeAttributes(writer, request.attributes);
+    return formatSftpPacket(SSH_FXP_SETSTAT, writer.toUint8Array());
+}
+/** Parses SSH_FXP_SETSTAT. */
+export function parseSftpSetStatRequest(input) {
+    const packet = expectPacket(input, SSH_FXP_SETSTAT, "SSH_FXP_SETSTAT");
+    if (!packet)
+        return undefined;
+    const reader = new SSHReader(packet.payload);
+    const request = {
+        id: reader.readUint32(),
+        path: decodeUtf8(reader.readString(), "SFTP path"),
+        attributes: readAttributes(reader),
+    };
+    reader.assertDone();
+    return { ...request, consumed: packet.consumed };
+}
+/** Formats SSH_FXP_FSETSTAT. */
+export function formatSftpFSetStatRequest(request) {
+    const writer = new SSHWriter().writeUint32(request.id).writeString(requireHandle(request.handle));
+    writeAttributes(writer, request.attributes);
+    return formatSftpPacket(SSH_FXP_FSETSTAT, writer.toUint8Array());
+}
+/** Parses SSH_FXP_FSETSTAT. */
+export function parseSftpFSetStatRequest(input) {
+    const packet = expectPacket(input, SSH_FXP_FSETSTAT, "SSH_FXP_FSETSTAT");
+    if (!packet)
+        return undefined;
+    const reader = new SSHReader(packet.payload);
+    const request = {
+        id: reader.readUint32(),
+        handle: requireHandle(reader.readString()),
+        attributes: readAttributes(reader),
+    };
+    reader.assertDone();
+    return { ...request, consumed: packet.consumed };
+}
 function expectPacket(input, type, name) {
     const packet = readSftpPacket(input);
     if (!packet)
@@ -471,6 +522,18 @@ function expectPacket(input, type, name) {
 }
 function formatPathRequest(type, request) {
     return formatSftpPacket(type, new SSHWriter().writeUint32(request.id).writeString(encodeUtf8(request.path, "SFTP path")).toUint8Array());
+}
+function formatHandleRequest(type, request) {
+    return formatSftpPacket(type, new SSHWriter().writeUint32(request.id).writeString(requireHandle(request.handle)).toUint8Array());
+}
+function parseHandleRequest(input, type, name) {
+    const packet = expectPacket(input, type, name);
+    if (!packet)
+        return undefined;
+    const reader = new SSHReader(packet.payload);
+    const request = { id: reader.readUint32(), handle: requireHandle(reader.readString()) };
+    reader.assertDone();
+    return { ...request, consumed: packet.consumed };
 }
 function parsePathRequest(input, type, name) {
     const packet = expectPacket(input, type, name);

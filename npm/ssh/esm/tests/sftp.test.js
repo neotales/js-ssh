@@ -1,6 +1,6 @@
 import { deepStrictEqual, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { formatSftpAttributes, formatSftpCloseRequest, formatSftpData, formatSftpHandle, formatSftpInit, formatSftpMkdirRequest, formatSftpName, formatSftpOpenDirRequest, formatSftpOpenRequest, formatSftpPacket, formatSftpReadDirRequest, formatSftpReadRequest, formatSftpRealPathRequest, formatSftpRemoveRequest, formatSftpRenameRequest, formatSftpRmdirRequest, formatSftpStatRequest, formatSftpStatus, formatSftpVersion, formatSftpWriteRequest, parseSftpAttributes, parseSftpCloseRequest, parseSftpData, parseSftpHandle, parseSftpInit, parseSftpMkdirRequest, parseSftpName, parseSftpOpenDirRequest, parseSftpOpenRequest, parseSftpReadDirRequest, parseSftpReadRequest, parseSftpRealPathRequest, parseSftpRemoveRequest, parseSftpRenameRequest, parseSftpRmdirRequest, parseSftpStatRequest, parseSftpStatus, parseSftpVersion, parseSftpWriteRequest, readSftpPacket, SFTPError, } from "../sftp.js";
+import { formatSftpAttributes, formatSftpCloseRequest, formatSftpData, formatSftpFSetStatRequest, formatSftpFStatRequest, formatSftpHandle, formatSftpInit, formatSftpMkdirRequest, formatSftpName, formatSftpOpenDirRequest, formatSftpOpenRequest, formatSftpPacket, formatSftpReadDirRequest, formatSftpReadRequest, formatSftpRealPathRequest, formatSftpRemoveRequest, formatSftpRenameRequest, formatSftpRmdirRequest, formatSftpSetStatRequest, formatSftpStatRequest, formatSftpStatus, formatSftpVersion, formatSftpWriteRequest, parseSftpAttributes, parseSftpCloseRequest, parseSftpData, parseSftpFSetStatRequest, parseSftpFStatRequest, parseSftpHandle, parseSftpInit, parseSftpMkdirRequest, parseSftpName, parseSftpOpenDirRequest, parseSftpOpenRequest, parseSftpReadDirRequest, parseSftpReadRequest, parseSftpRealPathRequest, parseSftpRemoveRequest, parseSftpRenameRequest, parseSftpRmdirRequest, parseSftpSetStatRequest, parseSftpStatRequest, parseSftpStatus, parseSftpVersion, parseSftpWriteRequest, readSftpPacket, SFTPError, } from "../sftp.js";
 test("SFTP framing reads complete packets and preserves trailing data", () => {
     const first = formatSftpPacket(200, Uint8Array.of(1, 2));
     const second = formatSftpPacket(201, Uint8Array.of(3));
@@ -111,4 +111,16 @@ test("SFTP path management messages preserve paths and attributes", () => {
     const rename = { id: 10, oldPath: "/old.txt", newPath: "/new.txt" };
     const renameWire = formatSftpRenameRequest(rename);
     deepStrictEqual(parseSftpRenameRequest(renameWire), { ...rename, consumed: renameWire.length });
+});
+test("SFTP handle metadata and attribute mutation messages roundtrip", () => {
+    const handle = Uint8Array.of(1, 2, 3);
+    const fstat = { id: 11, handle };
+    const fstatWire = formatSftpFStatRequest(fstat);
+    deepStrictEqual(parseSftpFStatRequest(fstatWire), { ...fstat, consumed: fstatWire.length });
+    const setstat = { id: 12, path: "/file", attributes: { permissions: 0o100600 } };
+    const setstatWire = formatSftpSetStatRequest(setstat);
+    deepStrictEqual(parseSftpSetStatRequest(setstatWire), { ...setstat, consumed: setstatWire.length });
+    const fsetstat = { id: 13, handle, attributes: { size: 50n } };
+    const fsetstatWire = formatSftpFSetStatRequest(fsetstat);
+    deepStrictEqual(parseSftpFSetStatRequest(fsetstatWire), { ...fsetstat, consumed: fsetstatWire.length });
 });

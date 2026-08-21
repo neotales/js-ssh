@@ -6,6 +6,9 @@ const SSH_FXP_OPEN = 3;
 const SSH_FXP_CLOSE = 4;
 const SSH_FXP_READ = 5;
 const SSH_FXP_WRITE = 6;
+const SSH_FXP_FSTAT = 8;
+const SSH_FXP_SETSTAT = 9;
+const SSH_FXP_FSETSTAT = 10;
 const SSH_FXP_STAT = 17;
 const SSH_FXP_OPENDIR = 11;
 const SSH_FXP_READDIR = 12;
@@ -165,6 +168,15 @@ export type SFTPRenameRequest = {
   oldPath: string;
   newPath: string;
 };
+
+/** SFTP request addressing an open handle. */
+export type SFTPHandleRequest = { id: number; handle: Uint8Array };
+
+/** SSH_FXP_SETSTAT request. */
+export type SFTPSetStatRequest = SFTPPathRequest & { attributes: SFTPAttributes };
+
+/** SSH_FXP_FSETSTAT request. */
+export type SFTPFSetStatRequest = SFTPHandleRequest & { attributes: SFTPAttributes };
 
 /** Error raised when an SFTP packet is malformed or exceeds configured limits. */
 export class SFTPError extends Error {
@@ -675,6 +687,60 @@ function readAttributes(reader: SSHReader): SFTPAttributes {
   return attributes;
 }
 
+/** Formats SSH_FXP_FSTAT. */
+export function formatSftpFStatRequest(request: SFTPHandleRequest): Uint8Array {
+  return formatHandleRequest(SSH_FXP_FSTAT, request);
+}
+
+/** Parses SSH_FXP_FSTAT. */
+export function parseSftpFStatRequest(input: Uint8Array): (SFTPHandleRequest & { consumed: number }) | undefined {
+  return parseHandleRequest(input, SSH_FXP_FSTAT, "SSH_FXP_FSTAT");
+}
+
+/** Formats SSH_FXP_SETSTAT. */
+export function formatSftpSetStatRequest(request: SFTPSetStatRequest): Uint8Array {
+  const writer = new SSHWriter().writeUint32(request.id).writeString(encodeUtf8(request.path, "SFTP path"));
+  writeAttributes(writer, request.attributes);
+  return formatSftpPacket(SSH_FXP_SETSTAT, writer.toUint8Array());
+}
+
+/** Parses SSH_FXP_SETSTAT. */
+export function parseSftpSetStatRequest(input: Uint8Array): (SFTPSetStatRequest & { consumed: number }) | undefined {
+  const packet = expectPacket(input, SSH_FXP_SETSTAT, "SSH_FXP_SETSTAT");
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const request = {
+    id: reader.readUint32(),
+    path: decodeUtf8(reader.readString(), "SFTP path"),
+    attributes: readAttributes(reader),
+  };
+  reader.assertDone();
+  return { ...request, consumed: packet.consumed };
+}
+
+/** Formats SSH_FXP_FSETSTAT. */
+export function formatSftpFSetStatRequest(request: SFTPFSetStatRequest): Uint8Array {
+  const writer = new SSHWriter().writeUint32(request.id).writeString(requireHandle(request.handle));
+  writeAttributes(writer, request.attributes);
+  return formatSftpPacket(SSH_FXP_FSETSTAT, writer.toUint8Array());
+}
+
+/** Parses SSH_FXP_FSETSTAT. */
+export function parseSftpFSetStatRequest(input: Uint8Array): (SFTPFSetStatRequest & { consumed: number }) | undefined {
+  const packet = expectPacket(input, SSH_FXP_FSETSTAT, "SSH_FXP_FSETSTAT");
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const request = {
+    id: reader.readUint32(),
+    handle: requireHandle(reader.readString()),
+    attributes: readAttributes(reader),
+  };
+  reader.assertDone();
+  return { ...request, consumed: packet.consumed };
+}
+
 function expectPacket(input: Uint8Array, type: number, name: string): SFTPPacket | undefined {
   const packet = readSftpPacket(input);
   if (!packet)
@@ -689,6 +755,27 @@ function formatPathRequest(type: number, request: SFTPPathRequest): Uint8Array {
     type,
     new SSHWriter().writeUint32(request.id).writeString(encodeUtf8(request.path, "SFTP path")).toUint8Array(),
   );
+}
+
+function formatHandleRequest(type: number, request: SFTPHandleRequest): Uint8Array {
+  return formatSftpPacket(
+    type,
+    new SSHWriter().writeUint32(request.id).writeString(requireHandle(request.handle)).toUint8Array(),
+  );
+}
+
+function parseHandleRequest(
+  input: Uint8Array,
+  type: number,
+  name: string,
+): (SFTPHandleRequest & { consumed: number }) | undefined {
+  const packet = expectPacket(input, type, name);
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const request = { id: reader.readUint32(), handle: requireHandle(reader.readString()) };
+  reader.assertDone();
+  return { ...request, consumed: packet.consumed };
 }
 
 function parsePathRequest(

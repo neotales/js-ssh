@@ -117,6 +117,19 @@ export type SFTPRenameRequest = {
     oldPath: string;
     newPath: string;
 };
+/** SFTP request addressing an open handle. */
+export type SFTPHandleRequest = {
+    id: number;
+    handle: Uint8Array;
+};
+/** SSH_FXP_SETSTAT request. */
+export type SFTPSetStatRequest = SFTPPathRequest & {
+    attributes: SFTPAttributes;
+};
+/** SSH_FXP_FSETSTAT request. */
+export type SFTPFSetStatRequest = SFTPHandleRequest & {
+    attributes: SFTPAttributes;
+};
 /** Error raised when an SFTP packet is malformed or exceeds configured limits. */
 export declare class SFTPError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -239,5 +252,23 @@ export declare function formatSftpAttributes(id: number, attributes: SFTPAttribu
 export declare function parseSftpAttributes(input: Uint8Array): ({
     id: number;
     attributes: SFTPAttributes;
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_FSTAT. */
+export declare function formatSftpFStatRequest(request: SFTPHandleRequest): Uint8Array;
+/** Parses SSH_FXP_FSTAT. */
+export declare function parseSftpFStatRequest(input: Uint8Array): (SFTPHandleRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_SETSTAT. */
+export declare function formatSftpSetStatRequest(request: SFTPSetStatRequest): Uint8Array;
+/** Parses SSH_FXP_SETSTAT. */
+export declare function parseSftpSetStatRequest(input: Uint8Array): (SFTPSetStatRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_FSETSTAT. */
+export declare function formatSftpFSetStatRequest(request: SFTPFSetStatRequest): Uint8Array;
+/** Parses SSH_FXP_FSETSTAT. */
+export declare function parseSftpFSetStatRequest(input: Uint8Array): (SFTPFSetStatRequest & {
     consumed: number;
 }) | undefined;

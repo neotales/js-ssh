@@ -4,6 +4,8 @@ import {
   formatSftpAttributes,
   formatSftpCloseRequest,
   formatSftpData,
+  formatSftpFSetStatRequest,
+  formatSftpFStatRequest,
   formatSftpHandle,
   formatSftpInit,
   formatSftpMkdirRequest,
@@ -17,6 +19,7 @@ import {
   formatSftpRemoveRequest,
   formatSftpRenameRequest,
   formatSftpRmdirRequest,
+  formatSftpSetStatRequest,
   formatSftpStatRequest,
   formatSftpStatus,
   formatSftpVersion,
@@ -24,6 +27,8 @@ import {
   parseSftpAttributes,
   parseSftpCloseRequest,
   parseSftpData,
+  parseSftpFSetStatRequest,
+  parseSftpFStatRequest,
   parseSftpHandle,
   parseSftpInit,
   parseSftpMkdirRequest,
@@ -36,6 +41,7 @@ import {
   parseSftpRemoveRequest,
   parseSftpRenameRequest,
   parseSftpRmdirRequest,
+  parseSftpSetStatRequest,
   parseSftpStatRequest,
   parseSftpStatus,
   parseSftpVersion,
@@ -162,4 +168,17 @@ test("SFTP path management messages preserve paths and attributes", () => {
   const rename = { id: 10, oldPath: "/old.txt", newPath: "/new.txt" };
   const renameWire = formatSftpRenameRequest(rename);
   deepStrictEqual(parseSftpRenameRequest(renameWire), { ...rename, consumed: renameWire.length });
+});
+
+test("SFTP handle metadata and attribute mutation messages roundtrip", () => {
+  const handle = Uint8Array.of(1, 2, 3);
+  const fstat = { id: 11, handle };
+  const fstatWire = formatSftpFStatRequest(fstat);
+  deepStrictEqual(parseSftpFStatRequest(fstatWire), { ...fstat, consumed: fstatWire.length });
+  const setstat = { id: 12, path: "/file", attributes: { permissions: 0o100600 } };
+  const setstatWire = formatSftpSetStatRequest(setstat);
+  deepStrictEqual(parseSftpSetStatRequest(setstatWire), { ...setstat, consumed: setstatWire.length });
+  const fsetstat = { id: 13, handle, attributes: { size: 50n } };
+  const fsetstatWire = formatSftpFSetStatRequest(fsetstat);
+  deepStrictEqual(parseSftpFSetStatRequest(fsetstatWire), { ...fsetstat, consumed: fsetstatWire.length });
 });
