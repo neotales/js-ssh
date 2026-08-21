@@ -35,4 +35,4 @@ export declare class SSHAesCtrHmacSha256 {
  *
  * The exchange hash must be the current KEX hash; the session ID remains the first exchange hash.
  */
-export declare function createAes128CtrHmacSha256Cipher(sharedSecret: Uint8Array, exchangeHash: Uint8Array, sessionId: Uint8Array, direction: SSHCipherDirection): Promise<SSHAesCtrHmacSha256>;
+export declare function createAes128CtrHmacSha256Cipher(sharedSecret: Uint8Array, exchangeHash: Uint8Array, sessionId: Uint8Array, direction: SSHCipherDirection, maximumPacketLength?: number): Promise<SSHAesCtrHmacSha256>;

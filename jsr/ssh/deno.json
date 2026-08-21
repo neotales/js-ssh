@@ -5,6 +5,7 @@
   "license": "MIT",
   "exports": {
     ".": "./mod.ts",
+    "./client": "./client.ts",
     "./keys": "./keys.ts",
     "./known_hosts": "./known_hosts.ts",
     "./sftp": "./sftp.ts"

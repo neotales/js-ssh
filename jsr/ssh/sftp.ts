@@ -196,7 +196,7 @@ export class SFTPClient {
 
   /** Closes the subsystem channel and rejects outstanding requests. */
   async close(reason: unknown = new Error("SFTP client closed")): Promise<void> {
-    await this.#terminate(reason);
+    await this.#terminate(reason, true);
   }
 
   async [Symbol.asyncDispose](): Promise<void> {
@@ -614,7 +614,7 @@ export class SFTPClient {
       pending.signal.removeEventListener("abort", pending.abort);
   }
 
-  #terminate(reason: unknown): Promise<void> {
+  #terminate(reason: unknown, normalClose = false): Promise<void> {
     if (!this.#closed) {
       this.#closed = true;
       this.#terminalReason = reason;
@@ -629,8 +629,12 @@ export class SFTPClient {
       const terminalReason = this.#terminalReason;
       this.#shutdown = (async () => {
         const cleanup: Promise<unknown>[] = [];
-        if (this.#channel.close)
-          cleanup.push(Promise.resolve().then(() => this.#channel.close!(terminalReason)));
+        if (this.#channel.close) {
+          // A normal public close must let managed channels retire only their own SSH channel.
+          cleanup.push(
+            Promise.resolve().then(() => normalClose ? this.#channel.close!() : this.#channel.close!(terminalReason)),
+          );
+        }
         cleanup.push(Promise.resolve().then(() => this.#writer.abort(terminalReason)));
         cleanup.push(Promise.resolve().then(() => this.#reader.cancel(terminalReason)));
         await Promise.allSettled(cleanup);

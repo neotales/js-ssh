@@ -106,14 +106,14 @@ export class SSHAesCtrHmacSha256 {
  *
  * The exchange hash must be the current KEX hash; the session ID remains the first exchange hash.
  */
-export async function createAes128CtrHmacSha256Cipher(sharedSecret, exchangeHash, sessionId, direction) {
+export async function createAes128CtrHmacSha256Cipher(sharedSecret, exchangeHash, sessionId, direction, maximumPacketLength) {
     const labels = direction === "client-to-server" ? { iv: "A", key: "C", mac: "E" } : { iv: "B", key: "D", mac: "F" };
     const [initialCounter, encryptionKey, integrityKey] = await Promise.all([
         deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.iv, AES_BLOCK_SIZE),
         deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.key, 16),
         deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.mac, HMAC_LENGTH),
     ]);
-    return SSHAesCtrHmacSha256.create({ initialCounter, encryptionKey, integrityKey });
+    return SSHAesCtrHmacSha256.create({ initialCounter, encryptionKey, integrityKey, maximumPacketLength });
 }
 function timingSafeEqual(left, right) {
     if (left.length !== right.length)

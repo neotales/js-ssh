@@ -7,3 +7,4 @@
 export * from "./keys.ts";
 export * from "./known_hosts.ts";
 export * from "./sftp.ts";
+export * from "./client.ts";

@@ -67,6 +67,13 @@ export type SSHExecChannelRequest = {
   command: string;
 };
 
+/** SSH `subsystem` channel-request parameters. */
+export type SSHSubsystemChannelRequest = {
+  recipientChannel: number;
+  wantReply: boolean;
+  subsystem: string;
+};
+
 /** Error raised when an SSH connection-protocol message is malformed. */
 export class SSHConnectionError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -262,6 +269,33 @@ export function parseExecChannelRequest(payload: Uint8Array): SSHExecChannelRequ
   return { recipientChannel: request.recipientChannel, wantReply: request.wantReply, command: request.command };
 }
 
+/** Formats an SSH `subsystem` channel request. */
+export function formatSubsystemChannelRequest(request: SSHSubsystemChannelRequest): Uint8Array {
+  return new SSHWriter()
+    .writeByte(SSH_MSG_CHANNEL_REQUEST)
+    .writeUint32(request.recipientChannel)
+    .writeString(new TextEncoder().encode("subsystem"))
+    .writeBoolean(request.wantReply)
+    .writeString(encodeUtf8(request.subsystem, "SSH subsystem name"))
+    .toUint8Array();
+}
+
+/** Parses an SSH `subsystem` channel request. */
+export function parseSubsystemChannelRequest(payload: Uint8Array): SSHSubsystemChannelRequest {
+  const reader = new SSHReader(payload);
+  expectMessage(reader, SSH_MSG_CHANNEL_REQUEST, "SSH_MSG_CHANNEL_REQUEST");
+  const request = {
+    recipientChannel: reader.readUint32(),
+    requestType: decodeName(reader.readString(), "SSH channel request type"),
+    wantReply: reader.readBoolean(),
+    subsystem: decodeUtf8(reader.readString(), "SSH subsystem name"),
+  };
+  reader.assertDone();
+  if (request.requestType !== "subsystem")
+    throw new SSHConnectionError(`expected an SSH subsystem request, received ${request.requestType}`);
+  return { recipientChannel: request.recipientChannel, wantReply: request.wantReply, subsystem: request.subsystem };
+}
+
 /** Formats an SSH `exit-status` channel request. */
 export function formatExitStatus(status: SSHExitStatus): Uint8Array {
   return new SSHWriter()
@@ -346,7 +380,10 @@ function decodeName(bytes: Uint8Array, name: string): string {
 function encodeUtf8(value: string, name: string): Uint8Array {
   if (value.includes("\0"))
     throw new SSHConnectionError(`${name} must not contain NUL`);
-  return new TextEncoder().encode(value);
+  const bytes = new TextEncoder().encode(value);
+  if (new TextDecoder("utf-8", { fatal: true }).decode(bytes) !== value)
+    throw new SSHConnectionError(`${name} must be valid UTF-8`);
+  return bytes;
 }
 
 function decodeUtf8(bytes: Uint8Array, name: string): string {

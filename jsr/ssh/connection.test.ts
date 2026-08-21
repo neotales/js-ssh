@@ -13,6 +13,7 @@ import {
   formatExecChannelRequest,
   formatExitStatus,
   formatSessionChannelOpen,
+  formatSubsystemChannelRequest,
   parseChannelClose,
   parseChannelData,
   parseChannelEof,
@@ -25,6 +26,7 @@ import {
   parseExecChannelRequest,
   parseExitStatus,
   parseSessionChannelOpen,
+  parseSubsystemChannelRequest,
   SSHConnectionError,
 } from "./connection.ts";
 
@@ -51,6 +53,18 @@ test("exec channel requests preserve commands and reject other request types", (
   const other = formatExecChannelRequest(request);
   other[9] = "x".charCodeAt(0);
   throws(() => parseExecChannelRequest(other), SSHConnectionError);
+});
+
+test("subsystem channel requests preserve valid UTF-8 names", () => {
+  const request = { recipientChannel: 1, wantReply: true, subsystem: "sftp" };
+  deepStrictEqual(parseSubsystemChannelRequest(formatSubsystemChannelRequest(request)), request);
+  throws(() => formatSubsystemChannelRequest({ ...request, subsystem: "bad\0name" }), SSHConnectionError);
+  const other = formatSubsystemChannelRequest(request);
+  other[9] = "x".charCodeAt(0);
+  throws(() => parseSubsystemChannelRequest(other), SSHConnectionError);
+  const invalidUtf8 = formatSubsystemChannelRequest(request);
+  invalidUtf8[23] = 0xff;
+  throws(() => parseSubsystemChannelRequest(invalidUtf8), SSHConnectionError);
 });
 
 test("channel controls preserve window updates, stderr, request replies, and exit status", () => {

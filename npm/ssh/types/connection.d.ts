@@ -45,6 +45,12 @@ export type SSHExecChannelRequest = {
     wantReply: boolean;
     command: string;
 };
+/** SSH `subsystem` channel-request parameters. */
+export type SSHSubsystemChannelRequest = {
+    recipientChannel: number;
+    wantReply: boolean;
+    subsystem: string;
+};
 /** Error raised when an SSH connection-protocol message is malformed. */
 export declare class SSHConnectionError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -85,6 +91,10 @@ export declare function parseChannelClose(payload: Uint8Array): number;
 export declare function formatExecChannelRequest(request: SSHExecChannelRequest): Uint8Array;
 /** Parses an SSH `exec` channel request. */
 export declare function parseExecChannelRequest(payload: Uint8Array): SSHExecChannelRequest;
+/** Formats an SSH `subsystem` channel request. */
+export declare function formatSubsystemChannelRequest(request: SSHSubsystemChannelRequest): Uint8Array;
+/** Parses an SSH `subsystem` channel request. */
+export declare function parseSubsystemChannelRequest(payload: Uint8Array): SSHSubsystemChannelRequest;
 /** Formats an SSH `exit-status` channel request. */
 export declare function formatExitStatus(status: SSHExitStatus): Uint8Array;
 /** Parses an SSH `exit-status` channel request. */

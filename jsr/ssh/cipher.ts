@@ -164,6 +164,7 @@ export async function createAes128CtrHmacSha256Cipher(
   exchangeHash: Uint8Array,
   sessionId: Uint8Array,
   direction: SSHCipherDirection,
+  maximumPacketLength?: number,
 ): Promise<SSHAesCtrHmacSha256> {
   const labels: { iv: SSHKeyMaterialLabel; key: SSHKeyMaterialLabel; mac: SSHKeyMaterialLabel } =
     direction === "client-to-server" ? { iv: "A", key: "C", mac: "E" } : { iv: "B", key: "D", mac: "F" };
@@ -172,7 +173,7 @@ export async function createAes128CtrHmacSha256Cipher(
     deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.key, 16),
     deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.mac, HMAC_LENGTH),
   ]);
-  return SSHAesCtrHmacSha256.create({ initialCounter, encryptionKey, integrityKey });
+  return SSHAesCtrHmacSha256.create({ initialCounter, encryptionKey, integrityKey, maximumPacketLength });
 }
 
 function timingSafeEqual(left: Uint8Array, right: Uint8Array): boolean {

@@ -6,3 +6,4 @@
 export * from "./keys.js";
 export * from "./known_hosts.js";
 export * from "./sftp.js";
+export * from "./client.js";

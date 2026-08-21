@@ -4,6 +4,7 @@ const process = require("process");
 const filePaths = [
     "auth.test.js",
     "cipher.test.js",
+    "client.test.js",
     "connection.test.js",
     "identification.test.js",
     "kex.test.js",

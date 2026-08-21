@@ -186,6 +186,31 @@ export function parseExecChannelRequest(payload) {
         throw new SSHConnectionError(`expected an SSH exec request, received ${request.requestType}`);
     return { recipientChannel: request.recipientChannel, wantReply: request.wantReply, command: request.command };
 }
+/** Formats an SSH `subsystem` channel request. */
+export function formatSubsystemChannelRequest(request) {
+    return new SSHWriter()
+        .writeByte(SSH_MSG_CHANNEL_REQUEST)
+        .writeUint32(request.recipientChannel)
+        .writeString(new TextEncoder().encode("subsystem"))
+        .writeBoolean(request.wantReply)
+        .writeString(encodeUtf8(request.subsystem, "SSH subsystem name"))
+        .toUint8Array();
+}
+/** Parses an SSH `subsystem` channel request. */
+export function parseSubsystemChannelRequest(payload) {
+    const reader = new SSHReader(payload);
+    expectMessage(reader, SSH_MSG_CHANNEL_REQUEST, "SSH_MSG_CHANNEL_REQUEST");
+    const request = {
+        recipientChannel: reader.readUint32(),
+        requestType: decodeName(reader.readString(), "SSH channel request type"),
+        wantReply: reader.readBoolean(),
+        subsystem: decodeUtf8(reader.readString(), "SSH subsystem name"),
+    };
+    reader.assertDone();
+    if (request.requestType !== "subsystem")
+        throw new SSHConnectionError(`expected an SSH subsystem request, received ${request.requestType}`);
+    return { recipientChannel: request.recipientChannel, wantReply: request.wantReply, subsystem: request.subsystem };
+}
 /** Formats an SSH `exit-status` channel request. */
 export function formatExitStatus(status) {
     return new SSHWriter()
@@ -259,7 +284,10 @@ function decodeName(bytes, name) {
 function encodeUtf8(value, name) {
     if (value.includes("\0"))
         throw new SSHConnectionError(`${name} must not contain NUL`);
-    return new TextEncoder().encode(value);
+    const bytes = new TextEncoder().encode(value);
+    if (new TextDecoder("utf-8", { fatal: true }).decode(bytes) !== value)
+        throw new SSHConnectionError(`${name} must be valid UTF-8`);
+    return bytes;
 }
 function decodeUtf8(bytes, name) {
     let value;
