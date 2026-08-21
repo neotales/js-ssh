@@ -1,6 +1,8 @@
 /src/
 /esm/tests/auth.test.js
 /types/tests/auth.test.d.ts
+/esm/tests/cipher.test.js
+/types/tests/cipher.test.d.ts
 /esm/tests/connection.test.js
 /types/tests/connection.test.d.ts
 /esm/tests/identification.test.js

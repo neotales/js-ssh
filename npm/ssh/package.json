@@ -38,6 +38,12 @@
         "default": "./esm/connection.js"
       }
     },
+    "./cipher": {
+      "import": {
+        "types": "./types/cipher.d.ts",
+        "default": "./esm/cipher.js"
+      }
+    },
     "./identification": {
       "import": {
         "types": "./types/identification.d.ts",

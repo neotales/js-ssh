@@ -12,3 +12,4 @@ export * from "./packet.js";
 export * from "./auth.js";
 export * from "./connection.js";
 export * from "./transport.js";
+export * from "./cipher.js";
