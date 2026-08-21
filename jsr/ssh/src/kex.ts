@@ -1,4 +1,7 @@
 import { SSHReader, SSHWriter } from "./wire.ts";
+import { parsePublicKey, SSHPublicKey } from "./public_key.ts";
+import { parseSignature } from "./signature.ts";
+import { verifyEd25519Signature } from "./verify.ts";
 
 const SSH_MSG_KEXINIT = 20;
 const SSH_MSG_NEWKEYS = 21;
@@ -74,6 +77,24 @@ export type SSHCurve25519ExchangeHashInput = {
   clientPublic: Uint8Array;
   serverPublic: Uint8Array;
   sharedSecret: Uint8Array;
+};
+
+/** Inputs needed to authenticate an SSH_MSG_KEX_ECDH_REPLY for curve25519-sha256. */
+export type SSHCurve25519ReplyVerificationInput = {
+  clientIdentification: string;
+  serverIdentification: string;
+  clientKexInit: Uint8Array;
+  serverKexInit: Uint8Array;
+  clientPrivateKey: CryptoKey;
+  clientPublicKey: Uint8Array;
+  reply: SSHKexEcdhReply;
+};
+
+/** Authenticated curve25519-sha256 reply material. */
+export type SSHCurve25519ReplyVerificationResult = {
+  hostKey: SSHPublicKey;
+  sharedSecret: Uint8Array;
+  exchangeHash: Uint8Array;
 };
 
 /** RFC 4253 key-material discriminator for directional IVs, ciphers, and MACs. */
@@ -222,6 +243,31 @@ export function deriveX25519SecretSync(privateKey: object, peerPublicKey: Uint8A
 export async function computeCurve25519Sha256ExchangeHash(input: SSHCurve25519ExchangeHashInput): Promise<Uint8Array> {
   const encoded = encodeExchangeHashInput(input);
   return new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(encoded).buffer));
+}
+
+/** Verifies an ssh-ed25519 signed SSH_MSG_KEX_ECDH_REPLY for curve25519-sha256. */
+export async function verifyCurve25519Sha256Reply(
+  input: SSHCurve25519ReplyVerificationInput,
+): Promise<SSHCurve25519ReplyVerificationResult> {
+  const hostKey = parsePublicKey(input.reply.hostKey);
+  const signature = parseSignature(input.reply.signature);
+  if (hostKey.type !== "ssh-ed25519" || signature.format !== "ssh-ed25519") {
+    throw new SSHKexError("curve25519-sha256 currently requires an ssh-ed25519 server host key");
+  }
+  const sharedSecret = await deriveX25519Secret(input.clientPrivateKey, input.reply.serverPublic);
+  const exchangeHash = await computeCurve25519Sha256ExchangeHash({
+    clientIdentification: input.clientIdentification,
+    serverIdentification: input.serverIdentification,
+    clientKexInit: input.clientKexInit,
+    serverKexInit: input.serverKexInit,
+    hostKey: input.reply.hostKey,
+    clientPublic: input.clientPublicKey,
+    serverPublic: input.reply.serverPublic,
+    sharedSecret,
+  });
+  if (!(await verifyEd25519Signature(hostKey, signature, exchangeHash)))
+    throw new SSHKexError("SSH server host-key signature verification failed");
+  return { hostKey, sharedSecret, exchangeHash };
 }
 
 /** Computes the RFC 8731 curve25519-sha256 exchange hash using synchronous Node-compatible crypto. */

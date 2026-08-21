@@ -25,6 +25,8 @@ export {
   parseKexInit,
   parseNewKeys,
   type SSHCurve25519ExchangeHashInput,
+  type SSHCurve25519ReplyVerificationInput,
+  type SSHCurve25519ReplyVerificationResult,
   type SSHKexEcdhReply,
   SSHKexError,
   type SSHKexInit,
@@ -32,4 +34,5 @@ export {
   type SSHKeyMaterialLabel,
   type SSHX25519KeyPair,
   type SSHX25519SyncKeyPair,
+  verifyCurve25519Sha256Reply,
 } from "./src/kex.ts";

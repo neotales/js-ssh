@@ -1,3 +1,4 @@
+import { SSHPublicKey } from "./public_key.js";
 /** SSH_MSG_KEXINIT algorithm proposal. */
 export type SSHKexInit = {
     cookie: Uint8Array;
@@ -53,6 +54,22 @@ export type SSHCurve25519ExchangeHashInput = {
     serverPublic: Uint8Array;
     sharedSecret: Uint8Array;
 };
+/** Inputs needed to authenticate an SSH_MSG_KEX_ECDH_REPLY for curve25519-sha256. */
+export type SSHCurve25519ReplyVerificationInput = {
+    clientIdentification: string;
+    serverIdentification: string;
+    clientKexInit: Uint8Array;
+    serverKexInit: Uint8Array;
+    clientPrivateKey: CryptoKey;
+    clientPublicKey: Uint8Array;
+    reply: SSHKexEcdhReply;
+};
+/** Authenticated curve25519-sha256 reply material. */
+export type SSHCurve25519ReplyVerificationResult = {
+    hostKey: SSHPublicKey;
+    sharedSecret: Uint8Array;
+    exchangeHash: Uint8Array;
+};
 /** RFC 4253 key-material discriminator for directional IVs, ciphers, and MACs. */
 export type SSHKeyMaterialLabel = "A" | "B" | "C" | "D" | "E" | "F";
 /** Error raised when an SSH key-exchange message is malformed. */
@@ -85,6 +102,8 @@ export declare function generateX25519KeyPairSync(): SSHX25519SyncKeyPair;
 export declare function deriveX25519SecretSync(privateKey: object, peerPublicKey: Uint8Array): Uint8Array;
 /** Computes the RFC 8731 curve25519-sha256 exchange hash. */
 export declare function computeCurve25519Sha256ExchangeHash(input: SSHCurve25519ExchangeHashInput): Promise<Uint8Array>;
+/** Verifies an ssh-ed25519 signed SSH_MSG_KEX_ECDH_REPLY for curve25519-sha256. */
+export declare function verifyCurve25519Sha256Reply(input: SSHCurve25519ReplyVerificationInput): Promise<SSHCurve25519ReplyVerificationResult>;
 /** Computes the RFC 8731 curve25519-sha256 exchange hash using synchronous Node-compatible crypto. */
 export declare function computeCurve25519Sha256ExchangeHashSync(input: SSHCurve25519ExchangeHashInput): Uint8Array;
 /** Expands SHA-256 SSH key material according to RFC 4253 section 7.2. */

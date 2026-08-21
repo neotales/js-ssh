@@ -1,6 +1,7 @@
 import { deepStrictEqual, notDeepStrictEqual, rejects, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { computeCurve25519Sha256ExchangeHash, computeCurve25519Sha256ExchangeHashSync, deriveKeyMaterial, deriveKeyMaterialSync, deriveX25519Secret, deriveX25519SecretSync, formatKexEcdhInit, formatKexEcdhReply, formatKexInit, formatNewKeys, generateX25519KeyPair, generateX25519KeyPairSync, isKexGuessCorrect, isSyncKexSupported, negotiateKexInit, parseKexEcdhInit, parseKexEcdhReply, parseKexInit, parseNewKeys, SSHKexError, } from "../kex.js";
+import { computeCurve25519Sha256ExchangeHash, computeCurve25519Sha256ExchangeHashSync, deriveKeyMaterial, deriveKeyMaterialSync, deriveX25519Secret, deriveX25519SecretSync, formatKexEcdhInit, formatKexEcdhReply, formatKexInit, formatNewKeys, generateX25519KeyPair, generateX25519KeyPairSync, isKexGuessCorrect, isSyncKexSupported, negotiateKexInit, parseKexEcdhInit, parseKexEcdhReply, parseKexInit, parseNewKeys, SSHKexError, verifyCurve25519Sha256Reply, } from "../kex.js";
+import { generateEd25519KeyPair, signEd25519 } from "../keys.js";
 function kexInit() {
     return {
         cookie: Uint8Array.from({ length: 16 }, (_, index) => index),
@@ -122,4 +123,38 @@ test("synchronous KEX APIs use Node-compatible crypto without static imports", a
     deepStrictEqual(computeCurve25519Sha256ExchangeHashSync(input), await computeCurve25519Sha256ExchangeHash(input));
     const hash = computeCurve25519Sha256ExchangeHashSync(input);
     deepStrictEqual(deriveKeyMaterialSync(secret, hash, hash, "C", 64), await deriveKeyMaterial(secret, hash, hash, "C", 64));
+});
+test("curve25519-sha256 authenticates an Ed25519 server reply", async () => {
+    const client = await generateX25519KeyPair();
+    const server = await generateX25519KeyPair();
+    const host = await generateEd25519KeyPair();
+    const clientKexInit = formatKexInit(kexInit());
+    const serverKexInit = formatKexInit(kexInit());
+    const sharedSecret = await deriveX25519Secret(server.privateKey, client.publicKey);
+    const exchangeHash = await computeCurve25519Sha256ExchangeHash({
+        clientIdentification: "SSH-2.0-client",
+        serverIdentification: "SSH-2.0-server",
+        clientKexInit,
+        serverKexInit,
+        hostKey: host.publicKey.marshal(),
+        clientPublic: client.publicKey,
+        serverPublic: server.publicKey,
+        sharedSecret,
+    });
+    const signature = await signEd25519(host.privateKey, exchangeHash);
+    const input = {
+        clientIdentification: "SSH-2.0-client",
+        serverIdentification: "SSH-2.0-server",
+        clientKexInit,
+        serverKexInit,
+        clientPrivateKey: client.privateKey,
+        clientPublicKey: client.publicKey,
+        reply: { hostKey: host.publicKey.marshal(), serverPublic: server.publicKey, signature: signature.marshal() },
+    };
+    const verified = await verifyCurve25519Sha256Reply(input);
+    deepStrictEqual(verified.sharedSecret, sharedSecret);
+    deepStrictEqual(verified.exchangeHash, exchangeHash);
+    const invalid = signature.marshal();
+    invalid[invalid.length - 1] ^= 1;
+    await rejects(() => verifyCurve25519Sha256Reply({ ...input, reply: { ...input.reply, signature: invalid } }), SSHKexError);
 });
