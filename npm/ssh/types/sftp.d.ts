@@ -3,4 +3,4 @@
  *
  * @module @neotales/ssh/sftp
  */
-export { formatSftpInit, formatSftpPacket, formatSftpVersion, parseSftpInit, parseSftpVersion, readSftpPacket, SFTPError, type SFTPExtension, type SFTPInit, type SFTPPacket, type SFTPVersion, } from "./src/sftp.js";
+export { formatSftpCloseRequest, formatSftpData, formatSftpHandle, formatSftpInit, formatSftpOpenRequest, formatSftpPacket, formatSftpReadRequest, formatSftpStatus, formatSftpVersion, parseSftpCloseRequest, parseSftpData, parseSftpHandle, parseSftpInit, parseSftpOpenRequest, parseSftpReadRequest, parseSftpStatus, parseSftpVersion, readSftpPacket, type SFTPCloseRequest, type SFTPData, SFTPError, type SFTPExtension, type SFTPHandle, type SFTPInit, type SFTPOpenRequest, type SFTPPacket, type SFTPReadRequest, type SFTPStatus, type SFTPVersion, } from "./src/sftp.js";

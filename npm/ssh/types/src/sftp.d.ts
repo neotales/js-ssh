@@ -19,6 +19,41 @@ export type SFTPPacket = {
     payload: Uint8Array;
     consumed: number;
 };
+/** SSH_FXP_OPEN request with empty v3 file attributes. */
+export type SFTPOpenRequest = {
+    id: number;
+    path: string;
+    pflags: number;
+};
+/** SSH_FXP_CLOSE request. */
+export type SFTPCloseRequest = {
+    id: number;
+    handle: Uint8Array;
+};
+/** SSH_FXP_READ request. */
+export type SFTPReadRequest = {
+    id: number;
+    handle: Uint8Array;
+    offset: bigint;
+    length: number;
+};
+/** SSH_FXP_HANDLE response. */
+export type SFTPHandle = {
+    id: number;
+    handle: Uint8Array;
+};
+/** SSH_FXP_DATA response. */
+export type SFTPData = {
+    id: number;
+    data: Uint8Array;
+};
+/** SSH_FXP_STATUS response. */
+export type SFTPStatus = {
+    id: number;
+    code: number;
+    message: string;
+    languageTag: string;
+};
 /** Error raised when an SFTP packet is malformed or exceeds configured limits. */
 export declare class SFTPError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -37,5 +72,41 @@ export declare function parseSftpInit(input: Uint8Array): (SFTPInit & {
 export declare function formatSftpVersion(version: SFTPVersion): Uint8Array;
 /** Parses SSH_FXP_VERSION, preserving bytes consumed when followed by another SFTP packet. */
 export declare function parseSftpVersion(input: Uint8Array): (SFTPVersion & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_OPEN with no file attributes. */
+export declare function formatSftpOpenRequest(request: SFTPOpenRequest): Uint8Array;
+/** Parses SSH_FXP_OPEN with no file attributes. */
+export declare function parseSftpOpenRequest(input: Uint8Array): (SFTPOpenRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_CLOSE. */
+export declare function formatSftpCloseRequest(request: SFTPCloseRequest): Uint8Array;
+/** Parses SSH_FXP_CLOSE. */
+export declare function parseSftpCloseRequest(input: Uint8Array): (SFTPCloseRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_READ. */
+export declare function formatSftpReadRequest(request: SFTPReadRequest): Uint8Array;
+/** Parses SSH_FXP_READ. */
+export declare function parseSftpReadRequest(input: Uint8Array): (SFTPReadRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_HANDLE. */
+export declare function formatSftpHandle(response: SFTPHandle): Uint8Array;
+/** Parses SSH_FXP_HANDLE. */
+export declare function parseSftpHandle(input: Uint8Array): (SFTPHandle & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_DATA. */
+export declare function formatSftpData(response: SFTPData): Uint8Array;
+/** Parses SSH_FXP_DATA. */
+export declare function parseSftpData(input: Uint8Array): (SFTPData & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_STATUS. */
+export declare function formatSftpStatus(response: SFTPStatus): Uint8Array;
+/** Parses SSH_FXP_STATUS. */
+export declare function parseSftpStatus(input: Uint8Array): (SFTPStatus & {
     consumed: number;
 }) | undefined;

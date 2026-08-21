@@ -2,6 +2,12 @@ import { SSHReader, SSHWriter } from "./wire.ts";
 
 const SSH_FXP_INIT = 1;
 const SSH_FXP_VERSION = 2;
+const SSH_FXP_OPEN = 3;
+const SSH_FXP_CLOSE = 4;
+const SSH_FXP_READ = 5;
+const SSH_FXP_STATUS = 101;
+const SSH_FXP_HANDLE = 102;
+const SSH_FXP_DATA = 103;
 const DEFAULT_MAXIMUM_PACKET_LENGTH = 1024 * 1024;
 
 /** One SFTP extension name and its opaque data. */
@@ -27,6 +33,47 @@ export type SFTPPacket = {
   type: number;
   payload: Uint8Array;
   consumed: number;
+};
+
+/** SSH_FXP_OPEN request with empty v3 file attributes. */
+export type SFTPOpenRequest = {
+  id: number;
+  path: string;
+  pflags: number;
+};
+
+/** SSH_FXP_CLOSE request. */
+export type SFTPCloseRequest = {
+  id: number;
+  handle: Uint8Array;
+};
+
+/** SSH_FXP_READ request. */
+export type SFTPReadRequest = {
+  id: number;
+  handle: Uint8Array;
+  offset: bigint;
+  length: number;
+};
+
+/** SSH_FXP_HANDLE response. */
+export type SFTPHandle = {
+  id: number;
+  handle: Uint8Array;
+};
+
+/** SSH_FXP_DATA response. */
+export type SFTPData = {
+  id: number;
+  data: Uint8Array;
+};
+
+/** SSH_FXP_STATUS response. */
+export type SFTPStatus = {
+  id: number;
+  code: number;
+  message: string;
+  languageTag: string;
 };
 
 /** Error raised when an SFTP packet is malformed or exceeds configured limits. */
@@ -100,6 +147,151 @@ export function parseSftpVersion(input: Uint8Array): (SFTPVersion & { consumed: 
   return { ...parseVersionPayload(packet.payload), consumed: packet.consumed };
 }
 
+/** Formats SSH_FXP_OPEN with no file attributes. */
+export function formatSftpOpenRequest(request: SFTPOpenRequest): Uint8Array {
+  return formatSftpPacket(
+    SSH_FXP_OPEN,
+    new SSHWriter()
+      .writeUint32(request.id)
+      .writeString(encodeUtf8(request.path, "SFTP path"))
+      .writeUint32(request.pflags)
+      .writeUint32(0)
+      .toUint8Array(),
+  );
+}
+
+/** Parses SSH_FXP_OPEN with no file attributes. */
+export function parseSftpOpenRequest(input: Uint8Array): (SFTPOpenRequest & { consumed: number }) | undefined {
+  const packet = expectPacket(input, SSH_FXP_OPEN, "SSH_FXP_OPEN");
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const request = {
+    id: reader.readUint32(),
+    path: decodeUtf8(reader.readString(), "SFTP path"),
+    pflags: reader.readUint32(),
+  };
+  if (reader.readUint32() !== 0)
+    throw new SFTPError("SFTP file attributes are not supported for SSH_FXP_OPEN parsing");
+  reader.assertDone();
+  return { ...request, consumed: packet.consumed };
+}
+
+/** Formats SSH_FXP_CLOSE. */
+export function formatSftpCloseRequest(request: SFTPCloseRequest): Uint8Array {
+  return formatSftpPacket(
+    SSH_FXP_CLOSE,
+    new SSHWriter().writeUint32(request.id).writeString(requireHandle(request.handle)).toUint8Array(),
+  );
+}
+
+/** Parses SSH_FXP_CLOSE. */
+export function parseSftpCloseRequest(input: Uint8Array): (SFTPCloseRequest & { consumed: number }) | undefined {
+  const packet = expectPacket(input, SSH_FXP_CLOSE, "SSH_FXP_CLOSE");
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const request = { id: reader.readUint32(), handle: requireHandle(reader.readString()) };
+  reader.assertDone();
+  return { ...request, consumed: packet.consumed };
+}
+
+/** Formats SSH_FXP_READ. */
+export function formatSftpReadRequest(request: SFTPReadRequest): Uint8Array {
+  return formatSftpPacket(
+    SSH_FXP_READ,
+    new SSHWriter()
+      .writeUint32(request.id)
+      .writeString(requireHandle(request.handle))
+      .writeUint64(request.offset)
+      .writeUint32(request.length)
+      .toUint8Array(),
+  );
+}
+
+/** Parses SSH_FXP_READ. */
+export function parseSftpReadRequest(input: Uint8Array): (SFTPReadRequest & { consumed: number }) | undefined {
+  const packet = expectPacket(input, SSH_FXP_READ, "SSH_FXP_READ");
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const request = {
+    id: reader.readUint32(),
+    handle: requireHandle(reader.readString()),
+    offset: reader.readUint64(),
+    length: reader.readUint32(),
+  };
+  reader.assertDone();
+  return { ...request, consumed: packet.consumed };
+}
+
+/** Formats SSH_FXP_HANDLE. */
+export function formatSftpHandle(response: SFTPHandle): Uint8Array {
+  return formatSftpPacket(
+    SSH_FXP_HANDLE,
+    new SSHWriter().writeUint32(response.id).writeString(requireHandle(response.handle)).toUint8Array(),
+  );
+}
+
+/** Parses SSH_FXP_HANDLE. */
+export function parseSftpHandle(input: Uint8Array): (SFTPHandle & { consumed: number }) | undefined {
+  const packet = expectPacket(input, SSH_FXP_HANDLE, "SSH_FXP_HANDLE");
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const response = { id: reader.readUint32(), handle: requireHandle(reader.readString()) };
+  reader.assertDone();
+  return { ...response, consumed: packet.consumed };
+}
+
+/** Formats SSH_FXP_DATA. */
+export function formatSftpData(response: SFTPData): Uint8Array {
+  return formatSftpPacket(
+    SSH_FXP_DATA,
+    new SSHWriter().writeUint32(response.id).writeString(response.data).toUint8Array(),
+  );
+}
+
+/** Parses SSH_FXP_DATA. */
+export function parseSftpData(input: Uint8Array): (SFTPData & { consumed: number }) | undefined {
+  const packet = expectPacket(input, SSH_FXP_DATA, "SSH_FXP_DATA");
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const response = { id: reader.readUint32(), data: reader.readString() };
+  reader.assertDone();
+  return { ...response, consumed: packet.consumed };
+}
+
+/** Formats SSH_FXP_STATUS. */
+export function formatSftpStatus(response: SFTPStatus): Uint8Array {
+  return formatSftpPacket(
+    SSH_FXP_STATUS,
+    new SSHWriter()
+      .writeUint32(response.id)
+      .writeUint32(response.code)
+      .writeString(encodeUtf8(response.message, "SFTP status message"))
+      .writeString(encodeUtf8(response.languageTag, "SFTP status language tag"))
+      .toUint8Array(),
+  );
+}
+
+/** Parses SSH_FXP_STATUS. */
+export function parseSftpStatus(input: Uint8Array): (SFTPStatus & { consumed: number }) | undefined {
+  const packet = expectPacket(input, SSH_FXP_STATUS, "SSH_FXP_STATUS");
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const response = {
+    id: reader.readUint32(),
+    code: reader.readUint32(),
+    message: decodeUtf8(reader.readString(), "SFTP status message"),
+    languageTag: decodeUtf8(reader.readString(), "SFTP status language tag"),
+  };
+  reader.assertDone();
+  return { ...response, consumed: packet.consumed };
+}
+
 function formatVersionPayload(version: number, extensions: readonly SFTPExtension[]): Uint8Array {
   const writer = new SSHWriter().writeUint32(version);
   for (const extension of extensions) {
@@ -116,6 +308,39 @@ function parseVersionPayload(payload: Uint8Array): { version: number; extensions
     extensions.push({ name: decodeExtensionName(reader.readString()), data: reader.readString() });
   }
   return { version, extensions };
+}
+
+function expectPacket(input: Uint8Array, type: number, name: string): SFTPPacket | undefined {
+  const packet = readSftpPacket(input);
+  if (!packet)
+    return undefined;
+  if (packet.type !== type)
+    throw new SFTPError(`expected ${name}`);
+  return packet;
+}
+
+function requireHandle(handle: Uint8Array): Uint8Array {
+  if (handle.length === 0)
+    throw new SFTPError("SFTP handles must not be empty");
+  return handle;
+}
+
+function encodeUtf8(value: string, name: string): Uint8Array {
+  if (value.includes("\0"))
+    throw new SFTPError(`${name} must not contain NUL`);
+  return new TextEncoder().encode(value);
+}
+
+function decodeUtf8(bytes: Uint8Array, name: string): string {
+  let value: string;
+  try {
+    value = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw new SFTPError(`${name} must be valid UTF-8`, { cause: error });
+  }
+  if (value.includes("\0"))
+    throw new SFTPError(`${name} must not contain NUL`);
+  return value;
 }
 
 function encodeExtensionName(value: string): Uint8Array {
