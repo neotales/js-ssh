@@ -61,6 +61,26 @@ export type SFTPStatus = {
     message: string;
     languageTag: string;
 };
+/** One extended SFTP v3 attribute. */
+export type SFTPExtendedAttribute = {
+    type: string;
+    data: Uint8Array;
+};
+/** SFTP v3 file attributes. Paired fields must be specified together. */
+export type SFTPAttributes = {
+    size?: bigint;
+    uid?: number;
+    gid?: number;
+    permissions?: number;
+    atime?: number;
+    mtime?: number;
+    extended?: readonly SFTPExtendedAttribute[];
+};
+/** SSH_FXP_STAT request. */
+export type SFTPStatRequest = {
+    id: number;
+    path: string;
+};
 /** Error raised when an SFTP packet is malformed or exceeds configured limits. */
 export declare class SFTPError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -121,5 +141,19 @@ export declare function parseSftpData(input: Uint8Array): (SFTPData & {
 export declare function formatSftpStatus(response: SFTPStatus): Uint8Array;
 /** Parses SSH_FXP_STATUS. */
 export declare function parseSftpStatus(input: Uint8Array): (SFTPStatus & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_STAT. */
+export declare function formatSftpStatRequest(request: SFTPStatRequest): Uint8Array;
+/** Parses SSH_FXP_STAT. */
+export declare function parseSftpStatRequest(input: Uint8Array): (SFTPStatRequest & {
+    consumed: number;
+}) | undefined;
+/** Formats SSH_FXP_ATTRS. */
+export declare function formatSftpAttributes(id: number, attributes: SFTPAttributes): Uint8Array;
+/** Parses SSH_FXP_ATTRS. */
+export declare function parseSftpAttributes(input: Uint8Array): ({
+    id: number;
+    attributes: SFTPAttributes;
     consumed: number;
 }) | undefined;

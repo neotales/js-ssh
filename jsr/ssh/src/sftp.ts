@@ -6,9 +6,16 @@ const SSH_FXP_OPEN = 3;
 const SSH_FXP_CLOSE = 4;
 const SSH_FXP_READ = 5;
 const SSH_FXP_WRITE = 6;
+const SSH_FXP_STAT = 17;
 const SSH_FXP_STATUS = 101;
 const SSH_FXP_HANDLE = 102;
 const SSH_FXP_DATA = 103;
+const SSH_FXP_ATTRS = 105;
+const SSH_FILEXFER_ATTR_SIZE = 0x0000_0001;
+const SSH_FILEXFER_ATTR_UIDGID = 0x0000_0002;
+const SSH_FILEXFER_ATTR_PERMISSIONS = 0x0000_0004;
+const SSH_FILEXFER_ATTR_ACMODTIME = 0x0000_0008;
+const SSH_FILEXFER_ATTR_EXTENDED = 0x8000_0000;
 const DEFAULT_MAXIMUM_PACKET_LENGTH = 1024 * 1024;
 
 /** One SFTP extension name and its opaque data. */
@@ -83,6 +90,29 @@ export type SFTPStatus = {
   code: number;
   message: string;
   languageTag: string;
+};
+
+/** One extended SFTP v3 attribute. */
+export type SFTPExtendedAttribute = {
+  type: string;
+  data: Uint8Array;
+};
+
+/** SFTP v3 file attributes. Paired fields must be specified together. */
+export type SFTPAttributes = {
+  size?: bigint;
+  uid?: number;
+  gid?: number;
+  permissions?: number;
+  atime?: number;
+  mtime?: number;
+  extended?: readonly SFTPExtendedAttribute[];
+};
+
+/** SSH_FXP_STAT request. */
+export type SFTPStatRequest = {
+  id: number;
+  path: string;
 };
 
 /** Error raised when an SFTP packet is malformed or exceeds configured limits. */
@@ -330,6 +360,46 @@ export function parseSftpStatus(input: Uint8Array): (SFTPStatus & { consumed: nu
   return { ...response, consumed: packet.consumed };
 }
 
+/** Formats SSH_FXP_STAT. */
+export function formatSftpStatRequest(request: SFTPStatRequest): Uint8Array {
+  return formatSftpPacket(
+    SSH_FXP_STAT,
+    new SSHWriter().writeUint32(request.id).writeString(encodeUtf8(request.path, "SFTP path")).toUint8Array(),
+  );
+}
+
+/** Parses SSH_FXP_STAT. */
+export function parseSftpStatRequest(input: Uint8Array): (SFTPStatRequest & { consumed: number }) | undefined {
+  const packet = expectPacket(input, SSH_FXP_STAT, "SSH_FXP_STAT");
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const request = { id: reader.readUint32(), path: decodeUtf8(reader.readString(), "SFTP path") };
+  reader.assertDone();
+  return { ...request, consumed: packet.consumed };
+}
+
+/** Formats SSH_FXP_ATTRS. */
+export function formatSftpAttributes(id: number, attributes: SFTPAttributes): Uint8Array {
+  const writer = new SSHWriter().writeUint32(id);
+  writeAttributes(writer, attributes);
+  return formatSftpPacket(SSH_FXP_ATTRS, writer.toUint8Array());
+}
+
+/** Parses SSH_FXP_ATTRS. */
+export function parseSftpAttributes(
+  input: Uint8Array,
+): ({ id: number; attributes: SFTPAttributes; consumed: number }) | undefined {
+  const packet = expectPacket(input, SSH_FXP_ATTRS, "SSH_FXP_ATTRS");
+  if (!packet)
+    return undefined;
+  const reader = new SSHReader(packet.payload);
+  const id = reader.readUint32();
+  const attributes = readAttributes(reader);
+  reader.assertDone();
+  return { id, attributes, consumed: packet.consumed };
+}
+
 function formatVersionPayload(version: number, extensions: readonly SFTPExtension[]): Uint8Array {
   const writer = new SSHWriter().writeUint32(version);
   for (const extension of extensions) {
@@ -346,6 +416,63 @@ function parseVersionPayload(payload: Uint8Array): { version: number; extensions
     extensions.push({ name: decodeExtensionName(reader.readString()), data: reader.readString() });
   }
   return { version, extensions };
+}
+
+function writeAttributes(writer: SSHWriter, attributes: SFTPAttributes): void {
+  const hasUidGid = attributes.uid !== undefined || attributes.gid !== undefined;
+  if (hasUidGid && (attributes.uid === undefined || attributes.gid === undefined))
+    throw new SFTPError("SFTP uid and gid attributes must be specified together");
+  const hasTimes = attributes.atime !== undefined || attributes.mtime !== undefined;
+  if (hasTimes && (attributes.atime === undefined || attributes.mtime === undefined))
+    throw new SFTPError("SFTP atime and mtime attributes must be specified together");
+  let flags = 0;
+  if (attributes.size !== undefined) flags += SSH_FILEXFER_ATTR_SIZE;
+  if (hasUidGid) flags += SSH_FILEXFER_ATTR_UIDGID;
+  if (attributes.permissions !== undefined) flags += SSH_FILEXFER_ATTR_PERMISSIONS;
+  if (hasTimes) flags += SSH_FILEXFER_ATTR_ACMODTIME;
+  if (attributes.extended && attributes.extended.length > 0) flags += SSH_FILEXFER_ATTR_EXTENDED;
+  writer.writeUint32(flags);
+  if (attributes.size !== undefined) writer.writeUint64(attributes.size);
+  if (hasUidGid) writer.writeUint32(attributes.uid!).writeUint32(attributes.gid!);
+  if (attributes.permissions !== undefined) writer.writeUint32(attributes.permissions);
+  if (hasTimes) writer.writeUint32(attributes.atime!).writeUint32(attributes.mtime!);
+  if (attributes.extended && attributes.extended.length > 0) {
+    writer.writeUint32(attributes.extended.length);
+    for (const extension of attributes.extended) {
+      writer.writeString(encodeUtf8(extension.type, "SFTP extended attribute type")).writeString(extension.data);
+    }
+  }
+}
+
+function readAttributes(reader: SSHReader): SFTPAttributes {
+  const flags = reader.readUint32();
+  const knownFlags = SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_UIDGID | SSH_FILEXFER_ATTR_PERMISSIONS |
+    SSH_FILEXFER_ATTR_ACMODTIME | SSH_FILEXFER_ATTR_EXTENDED;
+  if ((flags & ~knownFlags) !== 0)
+    throw new SFTPError("SFTP attributes contain unsupported flags");
+  const attributes: SFTPAttributes = {};
+  if ((flags & SSH_FILEXFER_ATTR_SIZE) !== 0) attributes.size = reader.readUint64();
+  if ((flags & SSH_FILEXFER_ATTR_UIDGID) !== 0) {
+    attributes.uid = reader.readUint32();
+    attributes.gid = reader.readUint32();
+  }
+  if ((flags & SSH_FILEXFER_ATTR_PERMISSIONS) !== 0) attributes.permissions = reader.readUint32();
+  if ((flags & SSH_FILEXFER_ATTR_ACMODTIME) !== 0) {
+    attributes.atime = reader.readUint32();
+    attributes.mtime = reader.readUint32();
+  }
+  if ((flags & SSH_FILEXFER_ATTR_EXTENDED) !== 0) {
+    const count = reader.readUint32();
+    const extended: SFTPExtendedAttribute[] = [];
+    for (let index = 0; index < count; index++) {
+      extended.push({
+        type: decodeUtf8(reader.readString(), "SFTP extended attribute type"),
+        data: reader.readString(),
+      });
+    }
+    attributes.extended = extended;
+  }
+  return attributes;
 }
 
 function expectPacket(input: Uint8Array, type: number, name: string): SFTPPacket | undefined {

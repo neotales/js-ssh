@@ -1,6 +1,6 @@
 import { deepStrictEqual, strictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
-import { formatSftpCloseRequest, formatSftpData, formatSftpHandle, formatSftpInit, formatSftpOpenRequest, formatSftpPacket, formatSftpReadRequest, formatSftpStatus, formatSftpVersion, formatSftpWriteRequest, parseSftpCloseRequest, parseSftpData, parseSftpHandle, parseSftpInit, parseSftpOpenRequest, parseSftpReadRequest, parseSftpStatus, parseSftpVersion, parseSftpWriteRequest, readSftpPacket, SFTPError, } from "../sftp.js";
+import { formatSftpAttributes, formatSftpCloseRequest, formatSftpData, formatSftpHandle, formatSftpInit, formatSftpOpenRequest, formatSftpPacket, formatSftpReadRequest, formatSftpStatRequest, formatSftpStatus, formatSftpVersion, formatSftpWriteRequest, parseSftpAttributes, parseSftpCloseRequest, parseSftpData, parseSftpHandle, parseSftpInit, parseSftpOpenRequest, parseSftpReadRequest, parseSftpStatRequest, parseSftpStatus, parseSftpVersion, parseSftpWriteRequest, readSftpPacket, SFTPError, } from "../sftp.js";
 test("SFTP framing reads complete packets and preserves trailing data", () => {
     const first = formatSftpPacket(200, Uint8Array.of(1, 2));
     const second = formatSftpPacket(201, Uint8Array.of(3));
@@ -59,4 +59,21 @@ test("SFTP open, close, and read requests roundtrip with responses", () => {
         languageTag: "en",
         consumed: statusWire.length,
     });
+});
+test("SFTP stat and attributes support v3 metadata fields", () => {
+    const stat = { id: 5, path: "/remote.txt" };
+    const statWire = formatSftpStatRequest(stat);
+    deepStrictEqual(parseSftpStatRequest(statWire), { ...stat, consumed: statWire.length });
+    const attributes = {
+        size: 123n,
+        uid: 1000,
+        gid: 1000,
+        permissions: 0o100644,
+        atime: 1_700_000_000,
+        mtime: 1_700_000_001,
+        extended: [{ type: "vendor@example.test", data: Uint8Array.of(1, 2) }],
+    };
+    const attrsWire = formatSftpAttributes(5, attributes);
+    deepStrictEqual(parseSftpAttributes(attrsWire), { id: 5, attributes, consumed: attrsWire.length });
+    throws(() => formatSftpAttributes(1, { uid: 1 }), SFTPError);
 });
