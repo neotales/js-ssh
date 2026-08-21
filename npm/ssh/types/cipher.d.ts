@@ -3,4 +3,4 @@
  *
  * @module @neotales/ssh/cipher
  */
-export { SSHAesCtrHmacSha256, type SSHAesCtrHmacSha256Options, SSHCipherError, type SSHProtectedPacket, } from "./src/cipher.js";
+export { createAes128CtrHmacSha256Cipher, SSHAesCtrHmacSha256, type SSHAesCtrHmacSha256Options, type SSHCipherDirection, SSHCipherError, type SSHProtectedPacket, } from "./src/cipher.js";

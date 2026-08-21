@@ -1,4 +1,5 @@
 import { formatPacket, readPacket } from "./packet.js";
+import { deriveKeyMaterial } from "./kex.js";
 const AES_BLOCK_SIZE = 16;
 const HMAC_LENGTH = 32;
 /** Error raised when an SSH protected packet is malformed or fails authentication. */
@@ -99,6 +100,20 @@ export class SSHAesCtrHmacSha256 {
     #incrementSequence() {
         this.#sequence = (this.#sequence + 1) >>> 0;
     }
+}
+/**
+ * Derives an aes128-ctr and hmac-sha2-256 packet cipher for one SSH transport direction.
+ *
+ * The exchange hash must be the current KEX hash; the session ID remains the first exchange hash.
+ */
+export async function createAes128CtrHmacSha256Cipher(sharedSecret, exchangeHash, sessionId, direction) {
+    const labels = direction === "client-to-server" ? { iv: "A", key: "C", mac: "E" } : { iv: "B", key: "D", mac: "F" };
+    const [initialCounter, encryptionKey, integrityKey] = await Promise.all([
+        deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.iv, AES_BLOCK_SIZE),
+        deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.key, 16),
+        deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.mac, HMAC_LENGTH),
+    ]);
+    return SSHAesCtrHmacSha256.create({ initialCounter, encryptionKey, integrityKey });
 }
 function timingSafeEqual(left, right) {
     if (left.length !== right.length)

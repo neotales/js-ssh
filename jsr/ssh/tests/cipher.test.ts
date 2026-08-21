@@ -1,6 +1,6 @@
 import { deepStrictEqual, rejects, strictEqual } from "node:assert/strict";
 import { test } from "node:test";
-import { SSHAesCtrHmacSha256, SSHCipherError } from "../cipher.ts";
+import { createAes128CtrHmacSha256Cipher, SSHAesCtrHmacSha256, SSHCipherError } from "../cipher.ts";
 
 function options() {
   return {
@@ -36,4 +36,16 @@ test("AES-CTR HMAC-SHA256 rejects unauthenticated packets", async () => {
   const packet = await sender.encrypt(Uint8Array.of(20));
   packet[packet.length - 1] ^= 1;
   await rejects(() => receiver.read(packet), SSHCipherError);
+});
+
+test("derived AES-CTR HMAC-SHA256 ciphers interoperate by transport direction", async () => {
+  const secret = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
+  const hash = Uint8Array.from({ length: 32 }, (_, index) => index + 33);
+  const client = await createAes128CtrHmacSha256Cipher(secret, hash, hash, "client-to-server");
+  const server = await createAes128CtrHmacSha256Cipher(secret, hash, hash, "client-to-server");
+  const packet = await client.encrypt(Uint8Array.of(50));
+  const decoded = await server.read(packet);
+  if (!decoded)
+    throw new Error("expected a derived protected packet");
+  deepStrictEqual(decoded.payload, Uint8Array.of(50));
 });

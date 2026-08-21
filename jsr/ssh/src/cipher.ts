@@ -1,4 +1,5 @@
 import { formatPacket, readPacket } from "./packet.ts";
+import { deriveKeyMaterial, type SSHKeyMaterialLabel } from "./kex.ts";
 
 const AES_BLOCK_SIZE = 16;
 const HMAC_LENGTH = 32;
@@ -16,6 +17,9 @@ export type SSHProtectedPacket = {
   payload: Uint8Array;
   consumed: number;
 };
+
+/** SSH transport direction used for RFC 4253 key-material labels. */
+export type SSHCipherDirection = "client-to-server" | "server-to-client";
 
 /** Error raised when an SSH protected packet is malformed or fails authentication. */
 export class SSHCipherError extends Error {
@@ -148,6 +152,27 @@ export class SSHAesCtrHmacSha256 {
   #incrementSequence(): void {
     this.#sequence = (this.#sequence + 1) >>> 0;
   }
+}
+
+/**
+ * Derives an aes128-ctr and hmac-sha2-256 packet cipher for one SSH transport direction.
+ *
+ * The exchange hash must be the current KEX hash; the session ID remains the first exchange hash.
+ */
+export async function createAes128CtrHmacSha256Cipher(
+  sharedSecret: Uint8Array,
+  exchangeHash: Uint8Array,
+  sessionId: Uint8Array,
+  direction: SSHCipherDirection,
+): Promise<SSHAesCtrHmacSha256> {
+  const labels: { iv: SSHKeyMaterialLabel; key: SSHKeyMaterialLabel; mac: SSHKeyMaterialLabel } =
+    direction === "client-to-server" ? { iv: "A", key: "C", mac: "E" } : { iv: "B", key: "D", mac: "F" };
+  const [initialCounter, encryptionKey, integrityKey] = await Promise.all([
+    deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.iv, AES_BLOCK_SIZE),
+    deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.key, 16),
+    deriveKeyMaterial(sharedSecret, exchangeHash, sessionId, labels.mac, HMAC_LENGTH),
+  ]);
+  return SSHAesCtrHmacSha256.create({ initialCounter, encryptionKey, integrityKey });
 }
 
 function timingSafeEqual(left: Uint8Array, right: Uint8Array): boolean {

@@ -10,6 +10,8 @@ export type SSHProtectedPacket = {
     payload: Uint8Array;
     consumed: number;
 };
+/** SSH transport direction used for RFC 4253 key-material labels. */
+export type SSHCipherDirection = "client-to-server" | "server-to-client";
 /** Error raised when an SSH protected packet is malformed or fails authentication. */
 export declare class SSHCipherError extends Error {
     constructor(message: string, options?: ErrorOptions);
@@ -28,3 +30,9 @@ export declare class SSHAesCtrHmacSha256 {
      */
     read(input: Uint8Array): Promise<SSHProtectedPacket | undefined>;
 }
+/**
+ * Derives an aes128-ctr and hmac-sha2-256 packet cipher for one SSH transport direction.
+ *
+ * The exchange hash must be the current KEX hash; the session ID remains the first exchange hash.
+ */
+export declare function createAes128CtrHmacSha256Cipher(sharedSecret: Uint8Array, exchangeHash: Uint8Array, sessionId: Uint8Array, direction: SSHCipherDirection): Promise<SSHAesCtrHmacSha256>;

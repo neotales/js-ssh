@@ -5,8 +5,10 @@
  */
 
 export {
+  createAes128CtrHmacSha256Cipher,
   SSHAesCtrHmacSha256,
   type SSHAesCtrHmacSha256Options,
+  type SSHCipherDirection,
   SSHCipherError,
   type SSHProtectedPacket,
 } from "./src/cipher.ts";
