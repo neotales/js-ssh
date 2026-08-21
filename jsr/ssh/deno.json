@@ -5,6 +5,7 @@
   "license": "MIT",
   "exports": {
     ".": "./mod.ts",
+    "./auth": "./auth.ts",
     "./identification": "./identification.ts",
     "./kex": "./kex.ts",
     "./keys": "./keys.ts",

@@ -1,4 +1,6 @@
 /src/
+/esm/tests/auth.test.js
+/types/tests/auth.test.d.ts
 /esm/tests/identification.test.js
 /types/tests/identification.test.d.ts
 /esm/tests/kex.test.js

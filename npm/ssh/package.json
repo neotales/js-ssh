@@ -26,6 +26,12 @@
         "default": "./esm/mod.js"
       }
     },
+    "./auth": {
+      "import": {
+        "types": "./types/auth.d.ts",
+        "default": "./esm/auth.js"
+      }
+    },
     "./identification": {
       "import": {
         "types": "./types/identification.d.ts",

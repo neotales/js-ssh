@@ -9,3 +9,4 @@ export * from "./known_hosts.js";
 export * from "./identification.js";
 export * from "./kex.js";
 export * from "./packet.js";
+export * from "./auth.js";
