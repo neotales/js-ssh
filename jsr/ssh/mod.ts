@@ -14,3 +14,4 @@ export * from "./auth.ts";
 export * from "./connection.ts";
 export * from "./transport.ts";
 export * from "./cipher.ts";
+export * from "./sftp.ts";

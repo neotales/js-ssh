@@ -13,3 +13,4 @@ export * from "./auth.js";
 export * from "./connection.js";
 export * from "./transport.js";
 export * from "./cipher.js";
+export * from "./sftp.js";

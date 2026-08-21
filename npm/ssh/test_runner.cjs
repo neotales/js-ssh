@@ -11,6 +11,7 @@ const filePaths = [
     "tests/known_hosts.test.js",
     "tests/packet.test.js",
     "tests/primitives.test.js",
+    "tests/sftp.test.js",
     "tests/signature.test.js",
     "tests/transport.test.js",
 ];

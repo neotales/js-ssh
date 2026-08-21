@@ -80,6 +80,12 @@
         "default": "./esm/primitives.js"
       }
     },
+    "./sftp": {
+      "import": {
+        "types": "./types/sftp.d.ts",
+        "default": "./esm/sftp.js"
+      }
+    },
     "./transport": {
       "import": {
         "types": "./types/transport.d.ts",
