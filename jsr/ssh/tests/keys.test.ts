@@ -3,9 +3,11 @@ import { test } from "node:test";
 import {
   fingerprintSHA256,
   formatAuthorizedKey,
+  generateEd25519KeyPair,
   parseAuthorizedKey,
   parsePublicKey,
   parseSignature,
+  signEd25519,
   SSHKeyError,
   verifyEd25519Signature,
 } from "../keys.ts";
@@ -108,4 +110,12 @@ test("ssh-ed25519 signatures verify through native WebCrypto", async () => {
   );
   strictEqual(await verifyEd25519Signature(key, sshSignature, message), true);
   strictEqual(await verifyEd25519Signature(key, sshSignature, new TextEncoder().encode("different")), false);
+});
+
+test("generated SSH Ed25519 key pairs sign data in SSH wire format", async () => {
+  const pair = await generateEd25519KeyPair();
+  const message = new TextEncoder().encode("public key authentication");
+  const signature = await signEd25519(pair.privateKey, message);
+  strictEqual(signature.format, "ssh-ed25519");
+  strictEqual(await verifyEd25519Signature(pair.publicKey, signature, message), true);
 });
