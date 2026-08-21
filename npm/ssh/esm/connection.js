@@ -3,4 +3,4 @@
  *
  * @module @neotales/ssh/connection
  */
-export { formatChannelClose, formatChannelData, formatChannelEof, formatChannelOpenConfirmation, formatChannelOpenFailure, formatExecChannelRequest, formatSessionChannelOpen, parseChannelClose, parseChannelData, parseChannelEof, parseChannelOpenConfirmation, parseChannelOpenFailure, parseExecChannelRequest, parseSessionChannelOpen, SSHConnectionError, } from "./src/connection.js";
+export { formatChannelClose, formatChannelData, formatChannelEof, formatChannelExtendedData, formatChannelOpenConfirmation, formatChannelOpenFailure, formatChannelRequestFailure, formatChannelRequestSuccess, formatChannelWindowAdjust, formatExecChannelRequest, formatExitStatus, formatSessionChannelOpen, parseChannelClose, parseChannelData, parseChannelEof, parseChannelExtendedData, parseChannelOpenConfirmation, parseChannelOpenFailure, parseChannelRequestFailure, parseChannelRequestSuccess, parseChannelWindowAdjust, parseExecChannelRequest, parseExitStatus, parseSessionChannelOpen, SSHConnectionError, } from "./src/connection.js";

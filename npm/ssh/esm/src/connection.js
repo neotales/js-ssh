@@ -2,10 +2,14 @@ import { SSHReader, SSHWriter } from "./wire.js";
 const SSH_MSG_CHANNEL_OPEN = 90;
 const SSH_MSG_CHANNEL_OPEN_CONFIRMATION = 91;
 const SSH_MSG_CHANNEL_OPEN_FAILURE = 92;
+const SSH_MSG_CHANNEL_WINDOW_ADJUST = 93;
 const SSH_MSG_CHANNEL_DATA = 94;
+const SSH_MSG_CHANNEL_EXTENDED_DATA = 95;
 const SSH_MSG_CHANNEL_EOF = 96;
 const SSH_MSG_CHANNEL_CLOSE = 97;
 const SSH_MSG_CHANNEL_REQUEST = 98;
+const SSH_MSG_CHANNEL_SUCCESS = 99;
+const SSH_MSG_CHANNEL_FAILURE = 100;
 /** Error raised when an SSH connection-protocol message is malformed. */
 export class SSHConnectionError extends Error {
     constructor(message, options) {
@@ -91,6 +95,26 @@ export function parseChannelOpenFailure(payload) {
     reader.assertDone();
     return failure;
 }
+/** Formats SSH_MSG_CHANNEL_WINDOW_ADJUST. */
+export function formatChannelWindowAdjust(adjust) {
+    if (adjust.bytesToAdd === 0)
+        throw new SSHConnectionError("SSH channel window adjustment must not be zero");
+    return new SSHWriter()
+        .writeByte(SSH_MSG_CHANNEL_WINDOW_ADJUST)
+        .writeUint32(adjust.recipientChannel)
+        .writeUint32(adjust.bytesToAdd)
+        .toUint8Array();
+}
+/** Parses SSH_MSG_CHANNEL_WINDOW_ADJUST. */
+export function parseChannelWindowAdjust(payload) {
+    const reader = new SSHReader(payload);
+    expectMessage(reader, SSH_MSG_CHANNEL_WINDOW_ADJUST, "SSH_MSG_CHANNEL_WINDOW_ADJUST");
+    const adjust = { recipientChannel: reader.readUint32(), bytesToAdd: reader.readUint32() };
+    reader.assertDone();
+    if (adjust.bytesToAdd === 0)
+        throw new SSHConnectionError("SSH channel window adjustment must not be zero");
+    return adjust;
+}
 /** Formats SSH_MSG_CHANNEL_DATA. */
 export function formatChannelData(data) {
     return new SSHWriter().writeByte(SSH_MSG_CHANNEL_DATA).writeUint32(data.recipientChannel).writeString(data.data)
@@ -101,6 +125,23 @@ export function parseChannelData(payload) {
     const reader = new SSHReader(payload);
     expectMessage(reader, SSH_MSG_CHANNEL_DATA, "SSH_MSG_CHANNEL_DATA");
     const data = { recipientChannel: reader.readUint32(), data: reader.readString() };
+    reader.assertDone();
+    return data;
+}
+/** Formats SSH_MSG_CHANNEL_EXTENDED_DATA. */
+export function formatChannelExtendedData(data) {
+    return new SSHWriter()
+        .writeByte(SSH_MSG_CHANNEL_EXTENDED_DATA)
+        .writeUint32(data.recipientChannel)
+        .writeUint32(data.dataTypeCode)
+        .writeString(data.data)
+        .toUint8Array();
+}
+/** Parses SSH_MSG_CHANNEL_EXTENDED_DATA. */
+export function parseChannelExtendedData(payload) {
+    const reader = new SSHReader(payload);
+    expectMessage(reader, SSH_MSG_CHANNEL_EXTENDED_DATA, "SSH_MSG_CHANNEL_EXTENDED_DATA");
+    const data = { recipientChannel: reader.readUint32(), dataTypeCode: reader.readUint32(), data: reader.readString() };
     reader.assertDone();
     return data;
 }
@@ -144,6 +185,47 @@ export function parseExecChannelRequest(payload) {
     if (request.requestType !== "exec")
         throw new SSHConnectionError(`expected an SSH exec request, received ${request.requestType}`);
     return { recipientChannel: request.recipientChannel, wantReply: request.wantReply, command: request.command };
+}
+/** Formats an SSH `exit-status` channel request. */
+export function formatExitStatus(status) {
+    return new SSHWriter()
+        .writeByte(SSH_MSG_CHANNEL_REQUEST)
+        .writeUint32(status.recipientChannel)
+        .writeString(new TextEncoder().encode("exit-status"))
+        .writeBoolean(false)
+        .writeUint32(status.status)
+        .toUint8Array();
+}
+/** Parses an SSH `exit-status` channel request. */
+export function parseExitStatus(payload) {
+    const reader = new SSHReader(payload);
+    expectMessage(reader, SSH_MSG_CHANNEL_REQUEST, "SSH_MSG_CHANNEL_REQUEST");
+    const recipientChannel = reader.readUint32();
+    const requestType = decodeName(reader.readString(), "SSH channel request type");
+    const wantReply = reader.readBoolean();
+    const status = reader.readUint32();
+    reader.assertDone();
+    if (requestType !== "exit-status")
+        throw new SSHConnectionError(`expected an SSH exit-status request, received ${requestType}`);
+    if (wantReply)
+        throw new SSHConnectionError("SSH exit-status requests must not request a reply");
+    return { recipientChannel, status };
+}
+/** Formats SSH_MSG_CHANNEL_SUCCESS. */
+export function formatChannelRequestSuccess(recipientChannel) {
+    return formatChannelIdMessage(SSH_MSG_CHANNEL_SUCCESS, recipientChannel);
+}
+/** Parses SSH_MSG_CHANNEL_SUCCESS. */
+export function parseChannelRequestSuccess(payload) {
+    return parseChannelIdMessage(payload, SSH_MSG_CHANNEL_SUCCESS, "SSH_MSG_CHANNEL_SUCCESS");
+}
+/** Formats SSH_MSG_CHANNEL_FAILURE. */
+export function formatChannelRequestFailure(recipientChannel) {
+    return formatChannelIdMessage(SSH_MSG_CHANNEL_FAILURE, recipientChannel);
+}
+/** Parses SSH_MSG_CHANNEL_FAILURE. */
+export function parseChannelRequestFailure(payload) {
+    return parseChannelIdMessage(payload, SSH_MSG_CHANNEL_FAILURE, "SSH_MSG_CHANNEL_FAILURE");
 }
 function expectMessage(reader, message, name) {
     if (reader.readByte() !== message)

@@ -4,16 +4,26 @@ import {
   formatChannelClose,
   formatChannelData,
   formatChannelEof,
+  formatChannelExtendedData,
   formatChannelOpenConfirmation,
   formatChannelOpenFailure,
+  formatChannelRequestFailure,
+  formatChannelRequestSuccess,
+  formatChannelWindowAdjust,
   formatExecChannelRequest,
+  formatExitStatus,
   formatSessionChannelOpen,
   parseChannelClose,
   parseChannelData,
   parseChannelEof,
+  parseChannelExtendedData,
   parseChannelOpenConfirmation,
   parseChannelOpenFailure,
+  parseChannelRequestFailure,
+  parseChannelRequestSuccess,
+  parseChannelWindowAdjust,
   parseExecChannelRequest,
+  parseExitStatus,
   parseSessionChannelOpen,
   SSHConnectionError,
 } from "../connection.ts";
@@ -41,4 +51,18 @@ test("exec channel requests preserve commands and reject other request types", (
   const other = formatExecChannelRequest(request);
   other[9] = "x".charCodeAt(0);
   throws(() => parseExecChannelRequest(other), SSHConnectionError);
+});
+
+test("channel controls preserve window updates, stderr, request replies, and exit status", () => {
+  const adjust = { recipientChannel: 1, bytesToAdd: 4096 };
+  deepStrictEqual(parseChannelWindowAdjust(formatChannelWindowAdjust(adjust)), adjust);
+  const stderr = { recipientChannel: 1, dataTypeCode: 1, data: new TextEncoder().encode("problem\n") };
+  deepStrictEqual(parseChannelExtendedData(formatChannelExtendedData(stderr)), stderr);
+  strictEqual(parseChannelRequestSuccess(formatChannelRequestSuccess(1)), 1);
+  strictEqual(parseChannelRequestFailure(formatChannelRequestFailure(1)), 1);
+  deepStrictEqual(parseExitStatus(formatExitStatus({ recipientChannel: 1, status: 127 })), {
+    recipientChannel: 1,
+    status: 127,
+  });
+  throws(() => formatChannelWindowAdjust({ recipientChannel: 1, bytesToAdd: 0 }), SSHConnectionError);
 });
